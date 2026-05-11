@@ -73,8 +73,9 @@ lib/
 ## 🌍 Localization
 The app supports multiple languages. Localization files are managed in `lib/core/localization.dart`.
 
-## 🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
+## 🤝 Contributers
+- Nour-Eldin Mahmoud Elbandy
+- Fedaa Addean Fathi
+  
 ## 📄 License
 This project is licensed under the MIT License.
