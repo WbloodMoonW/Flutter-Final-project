@@ -16,16 +16,39 @@ class Conversation {
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
+    // Backend may send lastMessage as a String (the text) or a Map (full message).
+    ChatMessage? parsedLast;
+    final rawLast = json['lastMessage'];
+    if (rawLast is Map) {
+      parsedLast = ChatMessage.fromJson(Map<String, dynamic>.from(rawLast));
+    } else if (rawLast is String && rawLast.isNotEmpty) {
+      parsedLast = ChatMessage(
+        id: '',
+        conversationId: json['_id']?.toString() ?? '',
+        senderId: '',
+        text: rawLast,
+        createdAt: DateTime.tryParse(json['lastMessageAt']?.toString() ?? '') ?? DateTime.now(),
+      );
+    }
+
+    // Backend often returns `otherUser` instead of full `participants` list.
+    final participantsRaw = json['participants'] as List?;
+    final otherUser = json['otherUser'];
+    final List<User> participants = participantsRaw != null
+        ? participantsRaw.map((p) => User.fromJson(p as Map<String, dynamic>)).toList()
+        : (otherUser is Map
+            ? [User.fromJson(Map<String, dynamic>.from(otherUser))]
+            : <User>[]);
+
     return Conversation(
       id: json['_id'] ?? json['id'] ?? '',
-      participants: (json['participants'] as List? ?? [])
-          .map((p) => User.fromJson(p))
-          .toList(),
-      lastMessage: json['lastMessage'] != null 
-          ? ChatMessage.fromJson(json['lastMessage']) 
-          : null,
+      participants: participants,
+      lastMessage: parsedLast,
       unreadCount: json['unreadCount'] ?? 0,
-      updatedAt: DateTime.parse(json['updatedAt'] ?? DateTime.now().toIso8601String()),
+      updatedAt: DateTime.tryParse(
+            json['updatedAt']?.toString() ?? json['lastMessageAt']?.toString() ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 }
@@ -52,7 +75,7 @@ class ChatMessage {
       id: json['_id'] ?? json['id'] ?? '',
       conversationId: json['conversationId'] ?? '',
       senderId: json['senderId'] ?? json['sender'] ?? '',
-      text: json['text'] ?? '',
+      text: json['message'] ?? json['text'] ?? '',
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       isRead: json['isRead'] ?? false,
     );

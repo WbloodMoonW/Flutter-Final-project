@@ -9,6 +9,7 @@ import '../models/coupon_model.dart';
 class ClientViewModel extends ChangeNotifier {
   List<Category> _categories = [];
   List<Worker> _workers = [];
+  Coupon? _featuredCoupon;
   List<Worker> _filteredWorkers = [];
   List<Order> _myOrders = [];
   List<Address> _myAddresses = [];
@@ -24,6 +25,7 @@ class ClientViewModel extends ChangeNotifier {
 
   List<Category> get categories => _categories;
   List<Worker> get workers => _workers;
+  Coupon? get featuredCoupon => _featuredCoupon;
   List<Worker> get filteredWorkers => _filteredWorkers;
   List<Order> get myOrders => _myOrders;
   List<Address> get myAddresses => _myAddresses;
@@ -50,6 +52,15 @@ class ClientViewModel extends ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> fetchFeaturedCoupon() async {
+    try {
+      _featuredCoupon = await ApiService.getFeaturedCoupon();
+      notifyListeners();
+    } catch (_) {
+      _featuredCoupon = null;
     }
   }
 
@@ -156,23 +167,45 @@ class ClientViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> createBooking(String workerId, {String? serviceId, String? locationAddress, DateTime? scheduledFor, String? couponCode}) async {
+  // Returns the order map on success (so callers can chain a card-checkout
+  // step), or null on failure.
+  Future<Map<String, dynamic>?> createBooking({
+    required String serviceId,
+    String? locationAddress,
+    DateTime? scheduledFor,
+    String? couponCode,
+    String paymentMode = 'cash_on_delivery',
+  }) async {
     _setLoading(true);
     _errorMessage = null;
     try {
-      await ApiService.createBooking(workerId, serviceId: serviceId, locationAddress: locationAddress, scheduledFor: scheduledFor, couponCode: couponCode);
+      final order = await ApiService.createBooking(
+        serviceId: serviceId,
+        locationAddress: locationAddress,
+        scheduledFor: scheduledFor,
+        couponCode: couponCode,
+        paymentMode: paymentMode,
+      );
       await fetchMyOrders();
-      return true;
+      return order;
     } catch (e) {
       _errorMessage = e.toString();
-      return false;
+      return null;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<Coupon?> validateCoupon(String code) async {
-    return await ApiService.validateCoupon(code);
+  Future<Map<String, String>> createPaymobCheckout(String orderId) {
+    return ApiService.createPaymobCheckout(orderId);
+  }
+
+  Future<String> getPaymentStatus(String paymentId) {
+    return ApiService.getPaymentStatus(paymentId);
+  }
+
+  Future<Coupon?> validateCoupon(String code, {double? amount, String? categoryId}) async {
+    return await ApiService.validateCoupon(code, amount: amount, categoryId: categoryId);
   }
 
   void _setLoading(bool value) {

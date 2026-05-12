@@ -5,6 +5,10 @@ class Coupon {
   final double value;
   final DateTime? expiresAt;
   final bool isActive;
+  final String? bannerTitle;
+  final String? bannerSubtitle;
+  final String? bannerCtaLabel;
+  final String? bannerImage;
 
   Coupon({
     required this.id,
@@ -13,6 +17,10 @@ class Coupon {
     required this.value,
     this.expiresAt,
     this.isActive = true,
+    this.bannerTitle,
+    this.bannerSubtitle,
+    this.bannerCtaLabel,
+    this.bannerImage,
   });
 
   factory Coupon.fromJson(Map<String, dynamic> json) {
@@ -37,6 +45,10 @@ class Coupon {
       value: dValue,
       expiresAt: json['expiresAt'] != null ? DateTime.parse(json['expiresAt']) : null,
       isActive: json['status'] == 'active' || (json['isActive'] ?? true),
+      bannerTitle: json['bannerTitle']?.toString(),
+      bannerSubtitle: json['bannerSubtitle']?.toString(),
+      bannerCtaLabel: json['bannerCtaLabel']?.toString(),
+      bannerImage: json['bannerImage']?.toString(),
     );
   }
 }

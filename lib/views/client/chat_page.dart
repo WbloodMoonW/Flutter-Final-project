@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/localization.dart';
 import '../../services/api_service.dart';
+import '../../services/socket_service.dart';
 import '../../models/chat_models.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 
@@ -24,16 +25,32 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final Color primaryTeal = const Color(0xFF006D5B);
   List<ChatMessage> _messages = [];
   String? _activeConvId;
   bool _isLoading = true;
+  String _myId = '';
 
   @override
   void initState() {
     super.initState();
     _activeConvId = widget.conversationId;
+    _myId = Provider.of<AuthViewModel>(context, listen: false).currentUser?.id ?? '';
     _initializeChat();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    final socket = SocketService.socket;
+    if (socket != null && _activeConvId != null) {
+      socket.emit('chat:read', {'conversationId': _activeConvId});
+      socket.off('chat:message');
+      socket.off('ai:stream');
+    }
+    super.dispose();
   }
 
   Future<void> _initializeChat() async {
@@ -43,36 +60,99 @@ class _ChatPageState extends State<ChatPage> {
         _activeConvId = conv.id;
       }
     }
-    
+
     if (_activeConvId != null) {
       final msgs = await ApiService.getMessages(_activeConvId!);
-      setState(() {
-        _messages = msgs;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _messages = msgs;
+          _isLoading = false;
+        });
+      }
+      _scrollToBottom();
+      await _setupSocket();
     } else {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _sendMessage() async {
+  Future<void> _setupSocket() async {
+    final socket = await SocketService.connect();
+
+    socket.emit('chat:join', {'conversationId': _activeConvId});
+
+    socket.on('chat:message', (data) {
+      if (!mounted) return;
+      final msg = ChatMessage.fromJson(data is Map ? Map<String, dynamic>.from(data) : {});
+      // Only add messages from others; own messages are added optimistically in _sendMessage
+      if (msg.senderId != _myId && msg.conversationId == _activeConvId) {
+        setState(() => _messages.add(msg));
+        _scrollToBottom();
+      }
+    });
+
+    socket.on('ai:stream', (data) {
+      if (!mounted) return;
+      final token = data is Map ? (data['token'] ?? data['content'] ?? '').toString() : data.toString();
+      if (token.isEmpty) return;
+      setState(() {
+        if (_messages.isNotEmpty && _messages.last.senderId == 'ai') {
+          final last = _messages.last;
+          _messages[_messages.length - 1] = ChatMessage(
+            id: last.id,
+            conversationId: last.conversationId,
+            senderId: last.senderId,
+            text: last.text + token,
+            createdAt: last.createdAt,
+          );
+        } else {
+          _messages.add(ChatMessage(
+            id: 'ai-stream',
+            conversationId: _activeConvId ?? '',
+            senderId: 'ai',
+            text: token,
+            createdAt: DateTime.now(),
+          ));
+        }
+      });
+      _scrollToBottom();
+    });
+  }
+
+  void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty || _activeConvId == null) return;
-    
+
     _messageController.clear();
-    final sent = await ApiService.sendMessage(_activeConvId!, text);
-    if (sent != null) {
-      setState(() {
-        _messages.add(sent);
-      });
-    }
+
+    // Optimistic local update
+    final optimistic = ChatMessage(
+      id: 'local-${DateTime.now().millisecondsSinceEpoch}',
+      conversationId: _activeConvId!,
+      senderId: _myId,
+      text: text,
+      createdAt: DateTime.now(),
+    );
+    setState(() => _messages.add(optimistic));
+    _scrollToBottom();
+
+    ApiService.sendMessage(_activeConvId!, text, _myId);
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final authVM = Provider.of<AuthViewModel>(context);
-    final myId = authVM.currentUser?.id ?? '';
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -87,7 +167,9 @@ class _ChatPageState extends State<ChatPage> {
             CircleAvatar(
               backgroundColor: primaryTeal.withOpacity(0.1),
               child: Text(
-                widget.receiverName.isNotEmpty ? widget.receiverName.substring(0, 1).toUpperCase() : '?',
+                widget.receiverName.isNotEmpty
+                    ? widget.receiverName.substring(0, 1).toUpperCase()
+                    : '?',
                 style: TextStyle(color: primaryTeal, fontWeight: FontWeight.bold),
               ),
             ),
@@ -106,27 +188,29 @@ class _ChatPageState extends State<ChatPage> {
           ],
         ),
       ),
-      body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: primaryTeal))
-        : Directionality(
-            textDirection: AppLocalization.isArabic ? TextDirection.rtl : TextDirection.ltr,
-            child: Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isMe = msg.senderId == myId;
-                      return _buildMessageBubble(msg.text, isMe);
-                    },
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator(color: primaryTeal))
+          : Directionality(
+              textDirection:
+                  AppLocalization.isArabic ? TextDirection.rtl : TextDirection.ltr,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(20),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = _messages[index];
+                        final isMe = msg.senderId == _myId;
+                        return _buildMessageBubble(msg.text, isMe);
+                      },
+                    ),
                   ),
-                ),
-                _buildInputArea(),
-              ],
+                  _buildInputArea(),
+                ],
+              ),
             ),
-          ),
     );
   }
 
@@ -185,9 +269,13 @@ class _ChatPageState extends State<ChatPage> {
               ),
               child: TextField(
                 controller: _messageController,
-                textAlign: AppLocalization.isArabic ? TextAlign.right : TextAlign.left,
+                textAlign:
+                    AppLocalization.isArabic ? TextAlign.right : TextAlign.left,
+                onSubmitted: (_) => _sendMessage(),
                 decoration: InputDecoration(
-                  hintText: AppLocalization.isArabic ? 'اكتب رسالة...' : 'Type a message...',
+                  hintText: AppLocalization.isArabic
+                      ? 'اكتب رسالة...'
+                      : 'Type a message...',
                   hintStyle: GoogleFonts.cairo(color: Colors.grey[400], fontSize: 14),
                   border: InputBorder.none,
                 ),

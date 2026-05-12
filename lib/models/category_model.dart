@@ -20,7 +20,7 @@ class Category {
     return Category(
       id: extractId(json['_id'] ?? json['id']),
       name: json['name']?.toString() ?? '',
-      icon: json['icon']?.toString(),
+      icon: json['image']?.toString() ?? json['icon']?.toString(),
     );
   }
 

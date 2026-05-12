@@ -385,20 +385,26 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _buildStatItem(
-          AppLocalization.isArabic ? 'الطلبات' : 'Orders',
-          '${worker!.totalOrders}',
-          Icons.shopping_bag_outlined,
+        Expanded(
+          child: _buildStatItem(
+            AppLocalization.isArabic ? 'الطلبات' : 'Orders',
+            '${worker!.totalOrders}',
+            Icons.shopping_bag_outlined,
+          ),
         ),
-        _buildStatItem(
-          AppLocalization.isArabic ? 'التقييم' : 'Rating',
-          worker!.ratingAverage.toStringAsFixed(1),
-          Icons.star_rounded,
+        Expanded(
+          child: _buildStatItem(
+            AppLocalization.isArabic ? 'التقييم' : 'Rating',
+            worker!.ratingAverage.toStringAsFixed(1),
+            Icons.star_rounded,
+          ),
         ),
-        _buildStatItem(
-          AppLocalization.isArabic ? 'المنطقة' : 'Area',
-          worker!.location ?? (AppLocalization.isArabic ? 'القاهرة' : 'Cairo'),
-          Icons.location_on_outlined,
+        Expanded(
+          child: _buildStatItem(
+            AppLocalization.isArabic ? 'المنطقة' : 'Area',
+            worker!.location ?? (AppLocalization.isArabic ? 'القاهرة' : 'Cairo'),
+            Icons.location_on_outlined,
+          ),
         ),
       ],
     );
@@ -416,8 +422,20 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           child: Icon(icon, color: primaryTeal, size: 24),
         ),
         const SizedBox(height: 8),
-        Text(value, style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14)),
-        Text(label, style: GoogleFonts.cairo(color: Colors.grey[600], fontSize: 11)),
+        Text(
+          value,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+        Text(
+          label,
+          style: GoogleFonts.cairo(color: Colors.grey[600], fontSize: 11),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }

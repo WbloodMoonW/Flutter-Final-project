@@ -29,6 +29,7 @@ class _HomePageState extends State<HomePage> {
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
     await clientVM.fetchCategories();
     await clientVM.fetchWorkers();
+    await clientVM.fetchFeaturedCoupon();
   }
 
   @override
@@ -67,7 +68,7 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(height: 30),
                       _buildFeaturedSection(clientVM),
                       const SizedBox(height: 16),
-                      _buildOfferCard(),
+                      if (clientVM.featuredCoupon != null) _buildOfferCard(clientVM),
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -237,7 +238,23 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildOfferCard() {
+  Widget _buildOfferCard(ClientViewModel clientVM) {
+    final coupon = clientVM.featuredCoupon!;
+    final defaultTitle = coupon.type == 'fixed'
+        ? (AppLocalization.isArabic
+            ? 'خصم ${coupon.value.toStringAsFixed(0)} ج.م على خدمتك'
+            : '${coupon.value.toStringAsFixed(0)} EGP OFF your service')
+        : (AppLocalization.isArabic
+            ? 'خصم ${coupon.value.toStringAsFixed(0)}% على خدمتك'
+            : '${coupon.value.toStringAsFixed(0)}% OFF your service');
+    final title = (coupon.bannerTitle != null && coupon.bannerTitle!.isNotEmpty)
+        ? coupon.bannerTitle!
+        : defaultTitle;
+    final ctaLabel = (coupon.bannerCtaLabel != null && coupon.bannerCtaLabel!.isNotEmpty)
+        ? coupon.bannerCtaLabel!
+        : AppLocalization.translate('book_now');
+    final bannerImage = coupon.bannerImage;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
@@ -252,18 +269,50 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text(AppLocalization.isArabic ? 'عرض خاص' : 'Special Offer', style: GoogleFonts.cairo(color: Colors.white.withOpacity(0.8), fontSize: 14)),
                   const SizedBox(height: 4),
-                  Text(AppLocalization.isArabic ? 'خصم 20% على أول خدمة لك' : '20% OFF your first service', style: GoogleFonts.cairo(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(title, style: GoogleFonts.cairo(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  if (coupon.bannerSubtitle != null && coupon.bannerSubtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(coupon.bannerSubtitle!, style: GoogleFonts.cairo(color: Colors.white.withOpacity(0.85), fontSize: 13)),
+                  ],
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.6), style: BorderStyle.solid),
+                    ),
+                    child: Text(coupon.code, style: GoogleFonts.cairo(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      final mainWrapper = context.findAncestorStateOfType<MainWrapperState>();
+                      if (mainWrapper != null) mainWrapper.updateIndex(1);
+                    },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF86EFAC), foregroundColor: primaryTeal, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), padding: const EdgeInsets.symmetric(horizontal: 24), elevation: 0),
-                    child: Text(AppLocalization.translate('book_now'), style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                    child: Text(ctaLabel, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            const Icon(Icons.stars_rounded, color: Colors.white, size: 60),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: SizedBox(
+                width: 80,
+                height: 100,
+                child: (bannerImage != null && bannerImage.isNotEmpty)
+                    ? (bannerImage.startsWith('data:image')
+                        ? Image.memory(base64Decode(bannerImage.split(',').last), fit: BoxFit.cover)
+                        : Image.network(
+                            bannerImage.startsWith('http') ? bannerImage : 'https://angezny.onrender.com$bannerImage',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.stars_rounded, color: Colors.white, size: 60),
+                          ))
+                    : const Icon(Icons.stars_rounded, color: Colors.white, size: 60),
+              ),
+            ),
           ],
         ),
       ),

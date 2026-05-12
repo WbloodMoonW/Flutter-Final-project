@@ -81,7 +81,7 @@ class WorkerViewModel extends ChangeNotifier {
         final actualData = dashboardData['data'] ?? dashboardData;
         final profileData = actualData['profile'] ?? actualData['worker'] ?? actualData['user'] ?? (actualData.containsKey('email') ? actualData : {});
         _worker = Worker.fromJson(profileData);
-        
+
         final stats = actualData['stats'] as Map<String, dynamic>?;
         if (stats != null) {
           _totalEarnings = ((stats['totalEarnings'] ?? 0) as num).toDouble();
@@ -93,17 +93,21 @@ class WorkerViewModel extends ChangeNotifier {
           _reviewCount = (stats['totalReviews'] ?? profileData['totalReviews'] ?? 0) as int;
           _completionRate = (stats['completionRate'] ?? profileData['completionRate'] ?? 0) as int;
         }
+
+        // Extract licenses from profile (no separate endpoint exists)
+        final rawLicenses = profileData['licenses'] as List? ?? [];
+        _licenses = rawLicenses
+            .map((l) => (l as Map<String, dynamic>)['fileUrl']?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
-      
+
       _orders = await ApiService.getWorkerOrders();
       _wallet = await ApiService.getWorkerWallet() ?? {};
-      
+
       // Fetch categories
       final cats = await ApiService.getCategories();
       _categories = cats.map((c) => c.toJson()).toList();
-      
-      // Fetch licenses
-      _licenses = await ApiService.getWorkerLicenses();
       
       // Fetch notifications
       final notes = await ApiService.getNotifications();

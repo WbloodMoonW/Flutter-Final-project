@@ -10,6 +10,7 @@ import '../../models/coupon_model.dart';
 import '../../viewmodels/client_viewmodel.dart';
 import '../../services/api_service.dart';
 import 'map_picker_page.dart';
+import 'paymob_checkout_page.dart';
 
 class ConfirmOrderPage extends StatefulWidget {
   final Worker worker;
@@ -40,6 +41,28 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
   bool _isValidatingCoupon = false;
   double? _selectedLat;
   double? _selectedLng;
+
+  // Matches backend's resolveServicePrice — for range services we charge the
+  // min (the upper bound is just a "may go up to" hint for the customer).
+  double get _basePrice {
+    if (widget.service.typeofService == 'range' && widget.service.priceRange != null) {
+      final min = widget.service.priceRange!['min'];
+      if (min != null && min > 0) return min;
+    }
+    return widget.service.price;
+  }
+
+  String _formatServicePrice() {
+    final unit = AppLocalization.isArabic ? 'ج.م' : 'EGP';
+    if (widget.service.typeofService == 'range' && widget.service.priceRange != null) {
+      final min = widget.service.priceRange!['min'] ?? 0;
+      final max = widget.service.priceRange!['max'] ?? 0;
+      if (min > 0 || max > 0) {
+        return '${min.toStringAsFixed(0)} - ${max.toStringAsFixed(0)} $unit';
+      }
+    }
+    return '${widget.service.price.toStringAsFixed(0)} $unit';
+  }
 
   @override
   void initState() {
@@ -101,29 +124,88 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
       return;
     }
 
+    final serviceId = widget.service.id;
+    if (serviceId == null || serviceId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalization.isArabic ? 'يرجى تحديد الخدمة' : 'Please select a service')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
 
-    debugPrint('>>> ORDER: workerId=${widget.worker.id}, serviceId=${widget.service.id}, location=${_addressController.text}, scheduledFor=$_selectedDateTime');
+    debugPrint('>>> ORDER: workerId=${widget.worker.id}, serviceId=$serviceId, location=${_addressController.text}, scheduledFor=$_selectedDateTime');
 
-    final success = await clientVM.createBooking(
-      widget.worker.id,
-      serviceId: widget.service.id,
+    final order = await clientVM.createBooking(
+      serviceId: serviceId,
       locationAddress: _addressController.text,
       scheduledFor: _selectedDateTime,
       couponCode: _appliedCoupon?.code,
+      paymentMode: _paymentMethod == 'card' ? 'card' : 'cash_on_delivery',
     );
 
-    setState(() => _isLoading = false);
-
-    if (success) {
-      if (mounted) {
-        _showSuccessPopup();
-      }
-    } else {
+    if (order == null) {
+      setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(clientVM.errorMessage ?? 'Failed to confirm order')),
+        );
+      }
+      return;
+    }
+
+    // COD: order is live, worker has been notified — done.
+    if (_paymentMethod != 'card') {
+      setState(() => _isLoading = false);
+      if (mounted) _showSuccessPopup();
+      return;
+    }
+
+    // Card: pull the order id out of the response and start Paymob checkout.
+    final orderId = (order['_id'] ?? order['id'] ?? '').toString();
+    if (orderId.isEmpty) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalization.isArabic ? 'تعذّر بدء الدفع' : 'Could not start payment')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final session = await clientVM.createPaymobCheckout(orderId);
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      final result = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => PaymobCheckoutPage(
+            paymentId: session['paymentId'] ?? '',
+            checkoutUrl: session['checkoutUrl'] ?? '',
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+      if (result == 'completed') {
+        _showSuccessPopup();
+      } else if (result == 'failed') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalization.isArabic ? 'فشلت عملية الدفع' : 'Payment failed'), backgroundColor: Colors.red),
+        );
+      } else {
+        // 'pending' (webhook hasn't landed yet) or 'cancelled' — the order
+        // exists, customer can retry payment from the bookings tab.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalization.isArabic ? 'لم يكتمل الدفع — يمكنك إعادة المحاولة من تبويب الحجوزات' : 'Payment not completed — you can retry from the Bookings tab')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
         );
       }
     }
@@ -235,7 +317,7 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(AppLocalization.isArabic ? 'السعر' : 'Price', style: GoogleFonts.cairo(color: Colors.grey[500], fontSize: 11)),
-              Text('${widget.service.price.toStringAsFixed(0)} ${AppLocalization.isArabic ? "ج.م" : "EGP"}', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: primaryTeal, fontSize: 16)),
+              Text(_formatServicePrice(), style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: primaryTeal, fontSize: 15)),
             ],
           ),
         ],
@@ -383,11 +465,10 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'card',
-            title: AppLocalization.isArabic ? 'دفع بالبطاقة' : 'Card payment',
-            subtitle: AppLocalization.isArabic ? 'الدفع الإلكتروني بالبطاقة. سيتوفر قريباً.' : 'Online card payment. Will be enabled soon.',
+            title: AppLocalization.isArabic ? 'دفع بالبطاقة (Visa / Mastercard)' : 'Card payment (Visa / Mastercard)',
+            subtitle: AppLocalization.isArabic ? 'دفع آمن عبر Paymob. سيتم تحويلك لإتمام الدفع.' : 'Secure online payment via Paymob. You will be redirected to complete the payment.',
             icon: Icons.credit_card_rounded,
             selected: _paymentMethod == 'card',
-            isComingSoon: true,
           ),
         ],
       ),
@@ -444,7 +525,11 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
 
     setState(() => _isValidatingCoupon = true);
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
-    final coupon = await clientVM.validateCoupon(code);
+    final coupon = await clientVM.validateCoupon(
+      code,
+      amount: widget.service.price,
+      categoryId: widget.service.categoryId,
+    );
     setState(() => _isValidatingCoupon = false);
 
     if (coupon != null && coupon.isActive) {
@@ -453,7 +538,10 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
         if (coupon.type == 'fixed') {
           _discountAmount = coupon.value;
         } else {
-          _discountAmount = (widget.service.price * coupon.value) / 100;
+          _discountAmount = (_basePrice * coupon.value) / 100;
+        }
+        if (_discountAmount > _basePrice) {
+          _discountAmount = _basePrice;
         }
       });
       if (mounted) {
@@ -540,7 +628,7 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
   }
 
   Widget _buildPriceBreakdown() {
-    final double total = widget.service.price - _discountAmount;
+    final double total = (_basePrice - _discountAmount).clamp(0, double.infinity).toDouble();
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(20)),
@@ -550,9 +638,21 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(AppLocalization.isArabic ? 'سعر الخدمة' : 'Service price', style: GoogleFonts.cairo(color: Colors.grey[600], fontSize: 14)),
-              Text('${widget.service.price.toStringAsFixed(0)} EGP', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text(_formatServicePrice(), style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13)),
             ],
           ),
+          if (widget.service.typeofService == 'range') ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: AppLocalization.isArabic ? Alignment.centerRight : Alignment.centerLeft,
+              child: Text(
+                AppLocalization.isArabic
+                  ? 'يبدأ الإجمالي من الحد الأدنى وقد يزيد حسب الاتفاق'
+                  : 'Total starts at the minimum and may rise per agreement',
+                style: GoogleFonts.cairo(color: Colors.grey[500], fontSize: 11),
+              ),
+            ),
+          ],
           if (_discountAmount > 0) ...[
             const SizedBox(height: 12),
             Row(

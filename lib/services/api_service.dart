@@ -15,6 +15,7 @@ import '../models/support_models.dart';
 import '../models/coupon_model.dart';
 import '../models/provider_application_model.dart';
 import 'storage_service.dart';
+import 'socket_service.dart';
 
 class ApiService {
   static const String _baseUrl = 'https://angezny.onrender.com/api';
@@ -162,7 +163,8 @@ class ApiService {
         Uri.parse('$_baseUrl/auth/signup'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'name': '$firstName $lastName',
+          'firstName': firstName,
+          'lastName': lastName,
           'email': email,
           'phone': phone,
           'password': password,
@@ -279,22 +281,18 @@ class ApiService {
 
 
 
+  // GET /worker/licenses does not exist; extract from dashboard profile instead.
   static Future<List<String>> getWorkerLicenses() async {
     try {
-      final token = await StorageService.getToken();
-      if (token == null) return [];
-
-      final response = await http.get(
-        Uri.parse('$_baseUrl/worker/licenses'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is List) {
-          return data.map((l) => l['image']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
-        }
-      }
+      final dashboard = await getWorkerDashboard();
+      if (dashboard == null) return [];
+      final actualData = dashboard['data'] ?? dashboard;
+      final profileData = actualData['profile'] ?? actualData['worker'] ?? actualData;
+      final rawLicenses = profileData['licenses'] as List? ?? [];
+      return rawLicenses
+          .map((l) => (l as Map<String, dynamic>)['fileUrl']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
     } catch (e) {}
     return [];
   }
@@ -388,39 +386,17 @@ class ApiService {
     return null;
   }
 
-  static Future<ChatMessage?> sendMessage(String conversationId, String message) async {
+  static Future<void> sendMessage(String conversationId, String message, String senderId) async {
     try {
-      final token = await StorageService.getToken();
-      final body = {
+      final socket = await SocketService.connect();
+      socket.emit('chat:send', {
+        'conversationId': conversationId,
         'message': message,
-        'content': message, // Fallback for different backend versions
-        'messageType': 'text'
-      };
-      
-      debugPrint('>>> SEND MESSAGE BODY: ${json.encode(body)}');
-      
-      final response = await http.post(
-        Uri.parse('$_baseUrl/chat/conversations/$conversationId/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode(body),
-      ).timeout(const Duration(seconds: 15));
-
-      debugPrint('>>> SEND MESSAGE STATUS: ${response.statusCode}');
-      debugPrint('>>> SEND MESSAGE RESPONSE: ${response.body}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
-        // The backend might return the message in 'message' or 'data' field
-        final messageData = data['message'] ?? data['data'] ?? data;
-        return ChatMessage.fromJson(messageData);
-      }
+        'messageType': 'text',
+      });
     } catch (e) {
       debugPrint('>>> SEND MESSAGE ERROR: $e');
     }
-    return null;
   }
 
   static Future<List<WorkerService>> getWorkerServices() async {
@@ -640,16 +616,24 @@ class ApiService {
     }
   }
 
-  static Future<void> createBooking(String workerId, {String? serviceId, String? locationAddress, DateTime? scheduledFor, String? couponCode}) async {
+  // Returns the created order's id (and the raw map for callers that need
+  // more fields). Throws on non-2xx.
+  static Future<Map<String, dynamic>> createBooking({
+    required String serviceId,
+    String? locationAddress,
+    DateTime? scheduledFor,
+    String? couponCode,
+    String paymentMode = 'cash_on_delivery',
+  }) async {
     try {
       final token = await StorageService.getToken();
       final String formattedDate = scheduledFor!.toUtc().toIso8601String().split('.')[0] + 'Z';
 
       final body = <String, dynamic>{
-        'workerId': workerId,
-        if (serviceId != null) 'serviceId': serviceId,
+        'serviceId': serviceId,
         'address': locationAddress ?? '',
         'scheduledDate': formattedDate,
+        'paymentMode': paymentMode,
         if (couponCode != null) 'couponCode': couponCode,
       };
 
@@ -667,13 +651,54 @@ class ApiService {
       debugPrint('>>> ORDER RESPONSE STATUS: ${response.statusCode}');
       debugPrint('>>> ORDER RESPONSE BODY: ${response.body}');
 
+      final data = json.decode(response.body);
       if (response.statusCode != 201 && response.statusCode != 200) {
-        final data = json.decode(response.body);
         throw Exception(data['message'] ?? 'Failed to create order');
       }
+      return Map<String, dynamic>.from(data['order'] ?? data);
     } catch (e) {
       throw Exception(_handleError(e));
     }
+  }
+
+  // Starts a Paymob hosted-checkout session for an order. Returns
+  // { paymentId, checkoutUrl } that the mobile UI uses to open a WebView.
+  static Future<Map<String, String>> createPaymobCheckout(String orderId) async {
+    final token = await StorageService.getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/payments/checkout'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'orderId': orderId}),
+    ).timeout(const Duration(seconds: 20));
+    final data = json.decode(response.body);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(data['message'] ?? 'Failed to start checkout');
+    }
+    return {
+      'paymentId': (data['paymentId'] ?? '').toString(),
+      'checkoutUrl': (data['checkoutUrl'] ?? '').toString(),
+    };
+  }
+
+  // Polled by the WebView screen while the customer is paying — the webhook
+  // is authoritative server-side, this is just a way to surface the latest
+  // status to the UI.
+  static Future<String> getPaymentStatus(String paymentId) async {
+    try {
+      final token = await StorageService.getToken();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/payments/$paymentId/status'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return (data['payment']?['status'] ?? 'pending').toString();
+      }
+    } catch (_) {}
+    return 'pending';
   }
 
   // ============================================================
@@ -716,25 +741,14 @@ class ApiService {
     }
   }
 
+  // The backend has no role-switching endpoint. To change roles, the user must
+  // create a new account with the desired role.
   static Future<void> switchRole(String newRole) async {
-    try {
-      final token = await StorageService.getToken();
-      final response = await http.patch(
-        Uri.parse('$_baseUrl/auth/switch-role'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'role': newRole}),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        final data = json.decode(response.body);
-        throw Exception(data['message'] ?? 'Failed to switch role');
-      }
-    } catch (e) {
-      throw Exception(_handleError(e));
-    }
+    throw Exception(
+      AppLocalization.isArabic
+          ? 'لا يمكن تغيير الدور. يرجى إنشاء حساب جديد بالدور المطلوب.'
+          : 'Role switching is not supported. Please create a new account with the desired role.',
+    );
   }
 
   static Future<void> forgotPassword(String email) async {
@@ -774,7 +788,21 @@ class ApiService {
     }
   }
 
-  static Future<Coupon?> validateCoupon(String code) async {
+  static Future<Coupon?> getFeaturedCoupon() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/coupons/featured'))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200 && response.body.isNotEmpty) {
+        final data = json.decode(response.body);
+        final raw = data['coupon'] ?? data;
+        if (raw == null || (raw is Map && raw.isEmpty)) return null;
+        return Coupon.fromJson(Map<String, dynamic>.from(raw));
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  static Future<Coupon?> validateCoupon(String code, {double? amount, String? categoryId}) async {
     try {
       final token = await StorageService.getToken();
       final response = await http.post(
@@ -783,10 +811,16 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({'code': code}),
+        body: json.encode({
+          'code': code,
+          if (amount != null) 'amount': amount,
+          if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+        }),
       ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        // Backend returns { valid: false, message } for invalid codes — bail.
+        if (data is Map && data['valid'] == false) return null;
         return Coupon.fromJson(data['coupon'] ?? data);
       }
     } catch (e) {}
