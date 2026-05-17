@@ -57,21 +57,30 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           }
 
           if (requests.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.assignment_late_outlined,
-                    size: 64,
-                    color: textMuted.withOpacity(0.5),
+            return RefreshIndicator(
+              onRefresh: () => workerVM.fetchData(),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height - 150,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.assignment_late_outlined,
+                          size: 64,
+                          color: textMuted.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          isAr ? 'لا توجد طلبات حالياً' : 'No requests yet',
+                          style: GoogleFonts.cairo(color: textMuted, fontSize: 16),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    isAr ? 'لا توجد طلبات حالياً' : 'No requests yet',
-                    style: GoogleFonts.cairo(color: textMuted, fontSize: 16),
-                  ),
-                ],
+                ),
               ),
             );
           }
@@ -80,6 +89,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             onRefresh: () => workerVM.fetchData(),
             color: primaryColor,
             child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               itemCount: requests.length,
               itemBuilder: (context, index) {

@@ -242,9 +242,18 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  service.name,
-                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      service.name,
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      _translateServiceType(service.typeofService),
+                      style: GoogleFonts.cairo(color: primaryTeal, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
               ),
               Text(
@@ -450,5 +459,22 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
       ],
     );
   }
-}
 
+  String _translateServiceType(String type) {
+    if (AppLocalization.isArabic) {
+      switch (type.toLowerCase()) {
+        case 'fixed': return 'سعر ثابت';
+        case 'hourly': return 'سعر بالساعة';
+        case 'range': return 'نطاق سعري';
+        default: return type;
+      }
+    } else {
+      switch (type.toLowerCase()) {
+        case 'fixed': return 'Fixed Price';
+        case 'hourly': return 'Hourly Rate';
+        case 'range': return 'Price Range';
+        default: return type;
+      }
+    }
+  }
+}

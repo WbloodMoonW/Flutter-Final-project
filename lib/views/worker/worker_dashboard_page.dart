@@ -27,6 +27,7 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
   String _searchQuery = '';
   String _selectedFilter = 'الكل';
 
+  int _messagesRefreshKey = 0;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
 
@@ -53,47 +54,63 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<WorkerViewModel>(context, listen: false).fetchData();
     });
+    AppLocalization.localeNotifier.addListener(_onLocaleChanged);
+  }
+
+  void _onLocaleChanged() {
+    if (mounted) {
+      Provider.of<WorkerViewModel>(context, listen: false).fetchData();
+    }
   }
 
   @override
   void dispose() {
+    AppLocalization.localeNotifier.removeListener(_onLocaleChanged);
     _animController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isAr = AppLocalization.isArabic;
-    return Scaffold(
-      drawer: _buildDrawer(isAr),
-      appBar: (_currentNavIndex == 2 || _currentNavIndex == 3)
-          ? null
-          : AppBar(
-              backgroundColor: Colors.white,
-              elevation: 0,
-              centerTitle: false,
-              title: const Text(
-                'Angezny',
-                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+    return ValueListenableBuilder<Locale>(
+      valueListenable: AppLocalization.localeNotifier,
+      builder: (context, locale, child) {
+        final isAr = AppLocalization.isArabic;
+        return Directionality(
+          textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+          child: Scaffold(
+            drawer: _buildDrawer(isAr),
+            appBar: (_currentNavIndex == 2 || _currentNavIndex == 3)
+                ? null
+                : AppBar(
+                    backgroundColor: Colors.white,
+                    elevation: 0,
+                    centerTitle: false,
+                    title: const Text(
+                      'Angezny',
+                      style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+            body: FadeTransition(
+              opacity: _fadeAnimation,
+              child: IndexedStack(
+                index: _currentNavIndex,
+                children: [
+                  // 0 - Home
+                  _buildHomeTab(isAr),
+                  // 1 - Requests
+                  ServiceRequestsPage(key: ValueKey('requests_${locale.languageCode}')),
+                  // 2 - Messages
+                  _buildMessagesTab(isAr),
+                  // 3 - Profile
+                  WorkerProfilePage(key: ValueKey('profile_${locale.languageCode}')),
+                ],
               ),
             ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: IndexedStack(
-          index: _currentNavIndex,
-          children: [
-            // 0 - Home
-            _buildHomeTab(isAr),
-            // 1 - Requests
-            const ServiceRequestsPage(),
-            // 2 - Messages
-            _buildMessagesTab(isAr),
-            // 3 - Profile
-            const WorkerProfilePage(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(isAr),
+            bottomNavigationBar: _buildBottomNav(isAr),
+          ),
+        );
+      },
     );
   }
 
@@ -139,144 +156,158 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
   // ──────────────────────────────────────────
   Widget _buildMessagesTab(bool isAr) {
     final authVM = Provider.of<AuthViewModel>(context);
-    return FutureBuilder<List<Conversation>>(
-      future: ApiService.getConversations(),
-      builder: (context, snapshot) {
-        final conversations = snapshot.data ?? [];
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() {
+          _messagesRefreshKey++;
+        });
+      },
+      child: FutureBuilder<List<Conversation>>(
+        key: ValueKey(_messagesRefreshKey),
+        future: ApiService.getConversations(),
+        builder: (context, snapshot) {
+          final conversations = snapshot.data ?? [];
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isAr ? 'محادثاتي' : 'My Messages',
-                style: GoogleFonts.cairo(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: textDark,
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isAr ? 'محادثاتي' : 'My Messages',
+                  style: GoogleFonts.cairo(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: textDark,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              if (snapshot.connectionState == ConnectionState.waiting)
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(color: primaryColor),
-                  ),
-                )
-              else if (conversations.isEmpty)
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      isAr ? 'لا توجد محادثات حالياً' : 'No conversations yet',
-                      style: GoogleFonts.cairo(),
+                const SizedBox(height: 16),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Expanded(
+                    child: Center(
+                      child: CircularProgressIndicator(color: primaryColor),
                     ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: conversations.length,
-                    itemBuilder: (context, index) {
-                      final chat = conversations[index] as Conversation;
-                      final otherUser = chat.participants.firstWhere(
-                        (p) => p.id != authVM.currentUser?.id,
-                        orElse: () => chat.participants.first,
-                      );
-                      final lastMsg = chat.lastMessage?.text ?? (isAr ? 'بدء المحادثة' : 'Start conversation');
-
-                      return InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatPage(
-                                receiverId: otherUser.id,
-                                receiverName: otherUser.fullName,
-                                conversationId: chat.id,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cardWhite,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 26,
-                                backgroundColor: primaryColor.withOpacity(0.1),
-                                child: Text(
-                                  (otherUser.firstName.isNotEmpty ? otherUser.firstName : 'U').substring(0, 1),
-                                  style: const TextStyle(
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          otherUser.fullName,
-                                          style: GoogleFonts.cairo(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                            color: textDark,
-                                          ),
-                                        ),
-                                        Text(
-                                          isAr ? 'الآن' : 'Now',
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 11,
-                                            color: textMuted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      lastMsg,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 13,
-                                        color: textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                  )
+                else if (conversations.isEmpty)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(
+                        height: MediaQuery.of(context).size.height - 250,
+                        child: Center(
+                          child: Text(
+                            isAr ? 'لا توجد محادثات حالياً' : 'No conversations yet',
+                            style: GoogleFonts.cairo(),
                           ),
                         ),
-                      );
-                    },
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: conversations.length,
+                      itemBuilder: (context, index) {
+                        final chat = conversations[index] as Conversation;
+                        final otherUser = chat.participants.firstWhere(
+                          (p) => p.id != authVM.currentUser?.id,
+                          orElse: () => chat.participants.first,
+                        );
+                        final lastMsg = chat.lastMessage?.text ?? (isAr ? 'بدء المحادثة' : 'Start conversation');
+
+                        return InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatPage(
+                                  receiverId: otherUser.id,
+                                  receiverName: otherUser.fullName,
+                                  conversationId: chat.id,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cardWhite,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: primaryColor.withOpacity(0.1),
+                                  child: Text(
+                                    (otherUser.firstName.isNotEmpty ? otherUser.firstName : 'U').substring(0, 1),
+                                    style: const TextStyle(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            otherUser.fullName,
+                                            style: GoogleFonts.cairo(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                              color: textDark,
+                                            ),
+                                          ),
+                                          Text(
+                                            isAr ? 'الآن' : 'Now',
+                                            style: GoogleFonts.cairo(
+                                              fontSize: 11,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        lastMsg,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 13,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

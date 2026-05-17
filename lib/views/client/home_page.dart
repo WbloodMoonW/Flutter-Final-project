@@ -57,6 +57,7 @@ class _HomePageState extends State<HomePage> {
             : RefreshIndicator(
                 onRefresh: _fetchData,
                 child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

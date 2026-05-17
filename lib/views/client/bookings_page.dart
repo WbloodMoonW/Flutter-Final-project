@@ -45,6 +45,7 @@ class _BookingsPageState extends State<BookingsPage> {
               child: clientVM.myOrders.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(20),
                       itemCount: clientVM.myOrders.length,
                       itemBuilder: (context, index) {
@@ -57,17 +58,23 @@ class _BookingsPageState extends State<BookingsPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.calendar_today_outlined, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 20),
-          Text(
-            AppLocalization.isArabic ? 'لا توجد حجوزات حالياً' : 'No bookings yet',
-            style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey[500]),
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - 100, // Approximate height
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.calendar_today_outlined, size: 80, color: Colors.grey[300]),
+              const SizedBox(height: 20),
+              Text(
+                AppLocalization.isArabic ? 'لا توجد حجوزات حالياً' : 'No bookings yet',
+                style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey[500]),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

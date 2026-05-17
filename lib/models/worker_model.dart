@@ -77,15 +77,24 @@ class Worker {
     String? locStr;
     if (json['location'] is Map) {
       locStr = json['location']['address'] ?? json['location']['city'] ?? json['location']['label'];
-    } else if (json['location'] is String) {
+    } else if (json['location'] is String && json['location'].toString().isNotEmpty) {
       locStr = json['location'];
     }
+    
+    // Fallbacks
+    locStr ??= json['address']?.toString() ?? 
+               json['city']?.toString() ??
+               (json['userId'] is Map ? (json['userId']['address']?.toString() ?? json['userId']['location']?.toString()) : null) ??
+               (json['user'] is Map ? (json['user']['address']?.toString() ?? json['user']['location']?.toString()) : null);
+
 
     return Worker(
       id: workerId,
       user: User.fromJson(userData),
       title: json['title']?.toString() ?? json['profession']?.toString(),
-      bio: json['bio']?.toString(),
+      bio: json['bio']?.toString() ?? json['description']?.toString() ?? json['about']?.toString() ?? 
+           (json['userId'] is Map ? (json['userId']['bio']?.toString() ?? json['userId']['description']?.toString()) : null) ??
+           (json['user'] is Map ? (json['user']['bio']?.toString() ?? json['user']['description']?.toString()) : null),
       location: locStr,
       skills: json['skills'] is List ? List<String>.from(json['skills'].map((s) => s.toString())) : [],
       ratingAverage: (json['ratingAverage'] ?? 0.0).toDouble(),
