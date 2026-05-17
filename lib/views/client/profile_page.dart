@@ -109,21 +109,25 @@ class _ProfilePageState extends State<ProfilePage> {
       textDirection: AppLocalization.isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        body: SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildHeader(authVM),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    if (isEditing) _buildEditForm() else _buildProfileView(authVM),
-                    const SizedBox(height: 30),
-                    _buildActionButtons(authVM),
-                  ],
+        body: RefreshIndicator(
+          onRefresh: () => authVM.checkAuthStatus(),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                _buildHeader(authVM),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      if (isEditing) _buildEditForm() else _buildProfileView(authVM),
+                      const SizedBox(height: 30),
+                      _buildActionButtons(authVM),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

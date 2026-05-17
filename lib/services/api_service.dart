@@ -500,11 +500,14 @@ class ApiService {
     return null;
   }
 
-  static Future<List<Worker>> getWorkers({int? limit = 100, String? category, String? search}) async {
+  static Future<List<Worker>> getWorkers({int? limit = 100, String? category, String? search, double? lat, double? lng, String? postcode}) async {
     try {
-      String url = '$_baseUrl/workers?sort=mostOrdered&limit=$limit';
+      String url = '$_baseUrl/workers?limit=$limit';
       if (category != null && category.isNotEmpty) url += '&category=$category';
       if (search != null && search.isNotEmpty) url += '&search=$search';
+      if (lat != null) url += '&lat=$lat';
+      if (lng != null) url += '&lng=$lng';
+      if (postcode != null && postcode.isNotEmpty) url += '&postcode=$postcode';
 
       final response = await http.get(Uri.parse(url))
           .timeout(const Duration(seconds: 100));
@@ -512,10 +515,20 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List workersList = data['workers'] ?? [];
-        return workersList.map((w) => Worker.fromJson(w)).toList();
+        
+        final List<Worker> workers = [];
+        for (var w in workersList) {
+          try {
+            workers.add(Worker.fromJson(w));
+          } catch (e) {
+            debugPrint('Error parsing worker data: $e');
+            debugPrint('Malformed worker data: $w');
+          }
+        }
+        return workers;
       }
     } catch (e) {
-      print('Error in getWorkers: $e');
+      debugPrint('Error in getWorkers: $e');
     }
     return [];
   }
@@ -796,6 +809,44 @@ class ApiService {
         return WorkerService.fromMap(data['service']);
       } else {
         throw Exception(data['message'] ?? 'Failed to create service');
+      }
+    } catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  static Future<void> updateService(String serviceId, Map<String, dynamic> data) async {
+    try {
+      final token = await StorageService.getToken();
+      final response = await http.put(
+        Uri.parse('$_baseUrl/worker/services/$serviceId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(data),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to update service');
+      }
+    } catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  static Future<void> deleteService(String serviceId) async {
+    try {
+      final token = await StorageService.getToken();
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/worker/services/$serviceId'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to delete service');
       }
     } catch (e) {
       throw Exception(_handleError(e));

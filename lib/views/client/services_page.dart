@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/localization.dart';
 import '../../viewmodels/client_viewmodel.dart';
 import 'worker_profile_page.dart';
+import 'map_picker_page.dart';
 
 class ServicesPage extends StatefulWidget {
   const ServicesPage({super.key});
@@ -69,62 +70,67 @@ class _ServicesPageState extends State<ServicesPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: primaryTeal, borderRadius: BorderRadius.circular(12)),
-                      child: InkWell(
-                        onTap: () => _showFilterSheet(clientVM),
-                        child: const Icon(Icons.tune_rounded, color: Colors.white, size: 24),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: primaryTeal, borderRadius: BorderRadius.circular(12)),
+                    child: InkWell(
+                      onTap: () => _showFilterSheet(clientVM),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white, size: 24),
                     ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _fetchWorkers,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppLocalization.translate('available_providers'), style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text('${clientVM.filteredWorkers.length} ${AppLocalization.translate('results_count')}', style: GoogleFonts.cairo(fontSize: 14, color: Colors.grey[500])),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    if (clientVM.isLoading && clientVM.workers.isEmpty)
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.5,
+                        child: const Center(child: CircularProgressIndicator(color: Color(0xFF006D5B))),
+                      )
+                    else if (clientVM.filteredWorkers.isEmpty)
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.5,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.person_search_outlined, size: 64, color: Colors.grey[300]),
+                              const SizedBox(height: 16),
+                              Text(
+                                AppLocalization.isArabic ? 'لا يوجد مقدمي خدمة حالياً' : 'No providers found',
+                                style: GoogleFonts.cairo(color: Colors.grey[500]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      ...clientVM.filteredWorkers.map((worker) => _buildProviderCard(
+                            id: worker.id,
+                            name: worker.user.fullName,
+                            role: worker.user.isVerified ? (AppLocalization.isArabic ? 'موثق' : 'Verified') : (AppLocalization.isArabic ? 'مزود خدمة' : 'Service Provider'),
+                            rating: worker.ratingAverage,
+                            price: '',
+                            imageUrl: worker.user.profileImage,
+                          )),
                   ],
                 ),
               ),
-              Expanded(
-                child: clientVM.isLoading && clientVM.workers.isEmpty
-                    ? Center(child: CircularProgressIndicator(color: primaryTeal))
-                    : RefreshIndicator(
-                        onRefresh: _fetchWorkers,
-                        child: ListView(
-                          padding: const EdgeInsets.all(24),
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(AppLocalization.translate('available_providers'), style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                                Text('${clientVM.filteredWorkers.length} ${AppLocalization.translate('results_count')}', style: GoogleFonts.cairo(fontSize: 14, color: Colors.grey[500])),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            if (clientVM.filteredWorkers.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 100),
-                                child: Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.person_search_rounded, size: 80, color: Colors.grey[300]),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        AppLocalization.isArabic ? 'لا يوجد مزودين متاحين حالياً' : 'No providers available at the moment',
-                                        style: GoogleFonts.cairo(color: Colors.grey[500], fontSize: 16),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              ...clientVM.filteredWorkers.map((worker) => _buildProviderCard(
-                                    id: worker.id,
-                                    name: worker.user.fullName,
-                                    role: worker.user.isVerified ? (AppLocalization.isArabic ? 'موثق' : 'Verified') : (AppLocalization.isArabic ? 'مزود خدمة' : 'Service Provider'),
-                                    rating: worker.ratingAverage,
-                                    price: AppLocalization.isArabic ? 'حسب الخدمة' : 'Per Service',
-                                    imageUrl: worker.user.profileImage,
-                                  )),
-                          ],
-                        ),
-                      ),
-              ),
+            ),
           ],
         ),
       ),
@@ -132,60 +138,145 @@ class _ServicesPageState extends State<ServicesPage> {
   }
 
   void _showFilterSheet(ClientViewModel clientVM) {
+    String? tempPostcode = clientVM.selectedPostcode;
+    String? tempAddress = clientVM.selectedAddress;
+    double? tempLat = clientVM.selectedLat;
+    double? tempLng = clientVM.selectedLng;
+
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(AppLocalization.isArabic ? 'تصفية النتائج' : 'Filter Results', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Text(AppLocalization.translate('categories'), style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 50,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: clientVM.categories.length + 1,
-                  itemBuilder: (context, index) {
-                    final isAll = index == 0;
-                    final cat = isAll ? null : clientVM.categories[index - 1];
-                    final label = isAll ? (AppLocalization.isArabic ? 'الكل' : 'All') : cat!.name;
-                    
-                    return GestureDetector(
-                      onTap: () {
-                        clientVM.fetchWorkers(categoryId: cat?.id);
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(AppLocalization.isArabic ? 'تصفية النتائج' : 'Filter Results', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.bold)),
+                      if (tempAddress != null)
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              tempAddress = null;
+                              tempLat = null;
+                              tempLng = null;
+                            });
+                          },
+                          child: Text(AppLocalization.isArabic ? 'مسح' : 'Clear', style: GoogleFonts.cairo(color: Colors.red)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(AppLocalization.translate('categories'), style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 50,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: clientVM.categories.length + 1,
+                      itemBuilder: (context, index) {
+                        final isAll = index == 0;
+                        final cat = isAll ? null : clientVM.categories[index - 1];
+                        final label = isAll ? (AppLocalization.isArabic ? 'الكل' : 'All') : cat!.name;
+                        
+                        return GestureDetector(
+                          onTap: () {
+                            clientVM.fetchWorkers(
+                              categoryId: cat?.id,
+                              lat: tempLat,
+                              lng: tempLng,
+                              postcode: tempPostcode,
+                              address: tempAddress,
+                            );
+                            Navigator.pop(context);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(child: Text(label, style: GoogleFonts.cairo(fontSize: 14))),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Text(AppLocalization.isArabic ? 'البحث في منطقة محددة' : 'Search in specific area', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const MapPickerPage()));
+                      if (result != null && result is Map) {
+                        setSheetState(() {
+                          tempAddress = result['address'];
+                          tempPostcode = result['postcode'];
+                          tempLat = result['lat'];
+                          tempLng = result['lng'];
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        children: [
+                          Icon(Icons.location_on_outlined, color: primaryTeal),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              tempAddress ?? (AppLocalization.isArabic ? 'اضغط لتحديد الموقع' : 'Tap to select location'),
+                              style: GoogleFonts.cairo(fontSize: 14, color: tempAddress == null ? Colors.grey : Colors.black),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (tempPostcode != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppLocalization.isArabic ? 'الرمز البريدي' : 'Postcode', style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(tempPostcode!, style: GoogleFonts.cairo(color: primaryTeal, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        clientVM.fetchWorkers(
+                          lat: tempLat,
+                          lng: tempLng,
+                          postcode: tempPostcode,
+                          address: tempAddress,
+                        );
                         Navigator.pop(context);
                       },
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Center(child: Text(label, style: GoogleFonts.cairo(fontSize: 14))),
-                      ),
-                    );
-                  },
-                ),
+                      style: ElevatedButton.styleFrom(backgroundColor: primaryTeal, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                      child: Text(AppLocalization.isArabic ? 'تطبيق الفلتر' : 'Apply Filter', style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: primaryTeal, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-                  child: Text(AppLocalization.isArabic ? 'إغلاق' : 'Close', style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

@@ -22,6 +22,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
   final MapController _mapController = MapController();
   LatLng? _selectedLocation;
   String _currentAddress = "";
+  String? _currentPostcode;
   bool _isReversing = false;
 
   @override
@@ -44,6 +45,9 @@ class _MapPickerPageState extends State<MapPickerPage> {
         final data = json.decode(response.body);
         setState(() {
           _currentAddress = data['display_name'] ?? "";
+          if (data['address'] != null) {
+            _currentPostcode = data['address']['postcode']?.toString();
+          }
         });
       }
     } catch (e) {
@@ -129,6 +133,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
                       onPressed: _currentAddress.isEmpty || _isReversing ? null : () {
                         Navigator.pop(context, {
                           'address': _currentAddress,
+                          'postcode': _currentPostcode,
                           'lat': _selectedLocation!.latitude,
                           'lng': _selectedLocation!.longitude,
                         });

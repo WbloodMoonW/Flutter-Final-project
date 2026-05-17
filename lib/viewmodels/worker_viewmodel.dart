@@ -77,10 +77,12 @@ class WorkerViewModel extends ChangeNotifier {
     try {
       final dashboardData = await ApiService.getWorkerDashboard();
       if (dashboardData != null) {
-        final profileData = dashboardData['profile'] ?? {};
+        // Handle nested 'data' field if present
+        final actualData = dashboardData['data'] ?? dashboardData;
+        final profileData = actualData['profile'] ?? actualData['worker'] ?? actualData['user'] ?? (actualData.containsKey('email') ? actualData : {});
         _worker = Worker.fromJson(profileData);
         
-        final stats = dashboardData['stats'] as Map<String, dynamic>?;
+        final stats = actualData['stats'] as Map<String, dynamic>?;
         if (stats != null) {
           _totalEarnings = ((stats['totalEarnings'] ?? 0) as num).toDouble();
           _pendingOrdersCount = (stats['pendingOrders'] ?? 0) as int;
@@ -137,15 +139,25 @@ class WorkerViewModel extends ChangeNotifier {
       
       // Basic info
       if (fullName != null) {
+        data['name'] = fullName;
         final parts = fullName.trim().split(' ');
         data['firstName'] = parts.first;
         data['lastName'] = parts.length > 1 ? parts.sublist(1).join(' ') : '';
       }
       if (bioText != null) data['bio'] = bioText;
-      if (title != null) data['title'] = title;
-      if (loc != null) data['location'] = loc;
+      if (title != null) {
+        data['title'] = title;
+        data['profession'] = title;
+      }
+      if (loc != null) {
+        data['location'] = loc;
+        data['address'] = loc;
+      }
       if (skillsList != null) data['skills'] = skillsList;
-      if (company != null) data['typeOfWorker'] = company ? 'company' : 'individual';
+      if (company != null) {
+        data['typeOfWorker'] = company ? 'company' : 'individual';
+        data['typeofWorker'] = data['typeOfWorker'];
+      }
       if (profileImageBase64 != null) data['profileImage'] = profileImageBase64;
       
       // Always include current portfolio and packages to match web behavior
@@ -273,35 +285,52 @@ class WorkerViewModel extends ChangeNotifier {
 
   Future<void> updateService(int index, WorkerService service) async {
     try {
-      if (_worker != null) {
+      if (_worker != null && service.id != null) {
+        await ApiService.updateService(service.id!, service.toMap());
         final newList = List<WorkerService>.from(_worker!.services);
         newList[index] = service;
         _worker = _worker!.copyWith(services: newList);
         notifyListeners();
       }
     } catch (e) {
-      rethrow;
+      _errorMessage = e.toString();
+      notifyListeners();
     }
   }
 
   Future<void> deleteService(int index) async {
     try {
       if (_worker != null) {
-        final newList = List<WorkerService>.from(_worker!.services)..removeAt(index);
-        _worker = _worker!.copyWith(services: newList);
-        notifyListeners();
+        final service = _worker!.services[index];
+        if (service.id != null) {
+          await ApiService.deleteService(service.id!);
+          final newList = List<WorkerService>.from(_worker!.services)..removeAt(index);
+          _worker = _worker!.copyWith(services: newList);
+          notifyListeners();
+        }
       }
     } catch (e) {
-      rethrow;
+      _errorMessage = e.toString();
+      notifyListeners();
     }
   }
   Future<void> toggleServiceStatus(int index) async {
     if (_worker == null) return;
     final newList = List<WorkerService>.from(_worker!.services);
     final service = newList[index];
-    newList[index] = service.copyWith(isActive: !service.isActive);
-    _worker = _worker!.copyWith(services: newList);
-    notifyListeners();
+    if (service.id == null) return;
+
+    final newStatus = !service.isActive;
+
+    try {
+      await ApiService.updateService(service.id!, {'active': newStatus});
+      newList[index] = service.copyWith(isActive: newStatus);
+      _worker = _worker!.copyWith(services: newList);
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
   }
 
   static const List<String> dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];

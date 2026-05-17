@@ -12,6 +12,7 @@ import '../../models/pricing_package.dart';
 import '../../models/working_hours.dart';
 import '../../models/order_model.dart';
 import '../auth/login_view.dart';
+import '../client/map_picker_page.dart';
 import 'support_components.dart';
 
 class WorkerProfilePage extends StatefulWidget {
@@ -38,6 +39,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   int _activeTab = 0;
   late Map<String, WorkingHoursEntry?> _localHours;
   bool _isAr = AppLocalization.isArabic;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -93,28 +95,48 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     final workerVM = Provider.of<WorkerViewModel>(context);
     _isAr = AppLocalization.isArabic;
 
+    // Populate controllers if they are not yet initialized and data is available
+    if (!_isInitialized && workerVM.worker != null && workerVM.name != "Worker") {
+      _nameCtrl.text = workerVM.name;
+      _emailCtrl.text = workerVM.email;
+      _phoneCtrl.text = workerVM.phone;
+      _titleCtrl.text = workerVM.professionalTitle;
+      _bioCtrl.text = workerVM.bio;
+      _locationCtrl.text = workerVM.location;
+      _skillsCtrl.text = workerVM.skills.join(', ');
+      _localHours = Map.from(workerVM.workingHours);
+      _isInitialized = true;
+    }
+
     return Directionality(
       textDirection: _isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                _buildHeader(workerVM),
-                const SizedBox(height: 24),
-                _buildStatsGrid(workerVM),
-                const SizedBox(height: 24),
-                _buildSettingsSection(workerVM),
-                const SizedBox(height: 24),
-                _buildSecondaryActions(workerVM),
-                const SizedBox(height: 32),
-                _buildTabs(workerVM),
-                const SizedBox(height: 16),
-                _buildTabContent(workerVM),
-                const SizedBox(height: 40),
-              ],
+          child: RefreshIndicator(
+            onRefresh: () async {
+              setState(() => _isInitialized = false);
+              await workerVM.loadWorkerData();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildHeader(workerVM),
+                  const SizedBox(height: 24),
+                  _buildStatsGrid(workerVM),
+                  const SizedBox(height: 24),
+                  _buildSettingsSection(workerVM),
+                  const SizedBox(height: 24),
+                  _buildSecondaryActions(workerVM),
+                  const SizedBox(height: 32),
+                  _buildTabs(workerVM),
+                  const SizedBox(height: 16),
+                  _buildTabContent(workerVM),
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           ),
         ),
@@ -550,7 +572,24 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         const SizedBox(height: 16),
         LabeledFormField(label: _isAr ? 'نبذة عنك' : 'Bio', hint: '', controller: _bioCtrl, maxLines: 4),
         const SizedBox(height: 16),
-        LabeledFormField(label: _isAr ? 'الموقع' : 'Location', hint: '', controller: _locationCtrl),
+        LabeledFormField(
+          label: _isAr ? 'الموقع' : 'Location', 
+          hint: _isAr ? 'اضغط لتحديد الموقع' : 'Tap to select location', 
+          controller: _locationCtrl,
+          readOnly: true,
+          suffixIcon: const Icon(Icons.map_outlined, color: primaryColor),
+          onTap: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MapPickerPage()),
+            );
+            if (result != null && result is Map) {
+              setState(() {
+                _locationCtrl.text = result['address'] ?? "";
+              });
+            }
+          },
+        ),
         const SizedBox(height: 16),
         LabeledFormField(label: _isAr ? 'المهارات (افصل بفاصلة)' : 'Skills (comma separated)', hint: '', controller: _skillsCtrl),
       ],

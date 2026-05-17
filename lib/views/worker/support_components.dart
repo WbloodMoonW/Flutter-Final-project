@@ -240,6 +240,8 @@ class LabeledFormField extends StatelessWidget {
   final int maxLines;
   final bool isRequired;
   final Widget? suffixIcon;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   const LabeledFormField({
     super.key,
@@ -249,6 +251,8 @@ class LabeledFormField extends StatelessWidget {
     this.maxLines = 1,
     this.isRequired = false,
     this.suffixIcon,
+    this.readOnly = false,
+    this.onTap,
   });
 
   @override
@@ -276,6 +280,8 @@ class LabeledFormField extends StatelessWidget {
         TextFormField(
           controller: controller,
           maxLines: maxLines,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 13),

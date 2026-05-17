@@ -5,6 +5,8 @@ import 'services_page.dart';
 import 'bookings_page.dart';
 import '../../core/localization.dart';
 import 'profile_page.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/client_viewmodel.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -18,6 +20,24 @@ class MainWrapperState extends State<MainWrapper> {
   int _selectedIndex = 0;
   final Color primaryTeal = const Color(0xFF006D5B);
 
+  @override
+  void initState() {
+    super.initState();
+    AppLocalization.localeNotifier.addListener(_onLocaleChanged);
+  }
+
+  @override
+  void dispose() {
+    AppLocalization.localeNotifier.removeListener(_onLocaleChanged);
+    super.dispose();
+  }
+
+  void _onLocaleChanged() {
+    if (mounted) {
+      Provider.of<ClientViewModel>(context, listen: false).fetchAll();
+    }
+  }
+
   void updateIndex(int index) {
     setState(() {
       _selectedIndex = index;
@@ -30,10 +50,10 @@ class MainWrapperState extends State<MainWrapper> {
       valueListenable: AppLocalization.localeNotifier,
       builder: (context, locale, child) {
         final List<Widget> pages = [
-          const HomePage(),
-          const ServicesPage(),
-          const BookingsPage(),
-          const ProfilePage(),
+          HomePage(key: ValueKey('home_${locale.languageCode}')),
+          ServicesPage(key: ValueKey('services_${locale.languageCode}')),
+          BookingsPage(key: ValueKey('bookings_${locale.languageCode}')),
+          ProfilePage(key: ValueKey('profile_${locale.languageCode}')),
         ];
 
         return Scaffold(
@@ -56,7 +76,7 @@ class MainWrapperState extends State<MainWrapper> {
               items: [
                 BottomNavigationBarItem(icon: const Icon(Icons.home_filled), label: AppLocalization.translate('home')),
                 BottomNavigationBarItem(icon: const Icon(Icons.grid_view_rounded), label: AppLocalization.translate('services')),
-                BottomNavigationBarItem(icon: const Icon(Icons.calendar_month_outlined), label: AppLocalization.isArabic ? 'الحجوزات' : 'Bookings'),
+                BottomNavigationBarItem(icon: const Icon(Icons.calendar_month_outlined), label: AppLocalization.translate('bookings')),
                 BottomNavigationBarItem(icon: const Icon(Icons.person_outline_rounded), label: AppLocalization.translate('profile')),
               ],
             ),
