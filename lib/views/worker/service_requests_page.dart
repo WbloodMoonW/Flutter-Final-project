@@ -220,7 +220,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             label: isAr ? 'رفض' : 'Reject',
                             color: Colors.redAccent,
                             onTap: () async {
-                              final ok = await workerVM.updateOrderStatus(r.id, 'cancelled');
+                              final ok = await workerVM.updateOrderStatus(r.id, 'rejected');
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                   content: Text(ok ? (isAr ? 'تم رفض الطلب' : 'Rejected') : (isAr ? 'فشل الرفض' : 'Failed')),

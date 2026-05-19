@@ -6,6 +6,7 @@ import '../../core/localization.dart';
 import '../../viewmodels/client_viewmodel.dart';
 import 'worker_profile_page.dart';
 import 'map_picker_page.dart';
+import 'worker_reviews_page.dart';
 
 class ServicesPage extends StatefulWidget {
   const ServicesPage({super.key});
@@ -315,6 +316,24 @@ class _ServicesPageState extends State<ServicesPage> {
                     children: [
                       Text(price, style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: primaryTeal)),
                       const Spacer(),
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WorkerReviewsPage(workerId: id),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryTeal,
+                          side: BorderSide(color: primaryTeal),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Text(AppLocalization.translate('reviews'), style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: () {
                           Navigator.push(

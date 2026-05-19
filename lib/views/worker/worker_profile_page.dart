@@ -1,4 +1,7 @@
 import 'package:angezny/views/worker/worker_public_profile_page.dart';
+import '../client/worker_profile_page.dart' as client_profile;
+import '../client/main_wrapper.dart';
+import 'worker_dashboard_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -40,6 +43,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   late Map<String, WorkingHoursEntry?> _localHours;
   bool _isAr = AppLocalization.isArabic;
   bool _isInitialized = false;
+  TimeOfDay _defaultFrom = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _defaultTo = const TimeOfDay(hour: 18, minute: 0);
 
   @override
   void initState() {
@@ -79,20 +84,26 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   ImageProvider _getImageProvider(String url) {
-    if (url.startsWith('data:image')) {
-      try {
-        final base64String = url.contains(',') ? url.split(',').last : url;
-        return MemoryImage(base64Decode(base64String));
-      } catch (e) {
-        return const NetworkImage('https://ui-avatars.com/api/?name=Error');
-      }
+    if (url.isEmpty) {
+      return const NetworkImage('https://ui-avatars.com/api/?name=Worker&background=006D5B&color=fff');
     }
-    return NetworkImage(url.isEmpty ? 'https://ui-avatars.com/api/?name=Worker&background=006D5B&color=fff' : url);
+    if (url.startsWith('http') || url.startsWith('https')) {
+      return NetworkImage(url);
+    }
+    try {
+      final base64String = url.contains(',') ? url.split(',').last : url;
+      // Remove any whitespace before decoding just in case
+      final cleaned = base64String.replaceAll(RegExp(r'\s+'), '');
+      return MemoryImage(base64Decode(cleaned));
+    } catch (e) {
+      return const NetworkImage('https://ui-avatars.com/api/?name=Error');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final workerVM = Provider.of<WorkerViewModel>(context);
+    final authVM = Provider.of<AuthViewModel>(context);
     _isAr = AppLocalization.isArabic;
 
     // Populate controllers if they are not yet initialized and data is available
@@ -104,7 +115,17 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
       _bioCtrl.text = workerVM.bio;
       _locationCtrl.text = workerVM.location;
       _skillsCtrl.text = workerVM.skills.join(', ');
-      _localHours = Map.from(workerVM.workingHours);
+      const englishToArabicDays = {
+        'sat': 'السبت', 'sun': 'الأحد', 'mon': 'الاثنين',
+        'tue': 'الثلاثاء', 'wed': 'الأربعاء', 'thu': 'الخميس', 'fri': 'الجمعة',
+        'saturday': 'السبت', 'sunday': 'الأحد', 'monday': 'الاثنين',
+        'tuesday': 'الثلاثاء', 'wednesday': 'الأربعاء', 'thursday': 'الخميس', 'friday': 'الجمعة',
+      };
+      _localHours = {};
+      workerVM.workingHours.forEach((day, entry) {
+        final arabicDay = englishToArabicDays[day.toLowerCase()] ?? day;
+        _localHours[arabicDay] = entry;
+      });
       _isInitialized = true;
     }
 
@@ -127,7 +148,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                   const SizedBox(height: 24),
                   _buildStatsGrid(workerVM),
                   const SizedBox(height: 24),
-                  _buildSettingsSection(workerVM),
+                  _buildSettingsSection(workerVM, authVM),
                   const SizedBox(height: 24),
                   _buildSecondaryActions(workerVM),
                   const SizedBox(height: 32),
@@ -260,7 +281,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     );
   }
 
-  Widget _buildSettingsSection(WorkerViewModel workerVM) {
+  Widget _buildSettingsSection(WorkerViewModel workerVM, AuthViewModel authVM) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -280,25 +301,88 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             ],
           ),
           const SizedBox(height: 12),
+          // Multi-Account Dropdown
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.withOpacity(0.2)),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundImage: _getImageProvider(workerVM.avatarUrl),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(workerVM.name, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-                ),
-                const Icon(Icons.keyboard_arrow_down_rounded, color: textMuted),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
               ],
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: authVM.accounts.any((acc) => acc['user']['email'] == authVM.currentUser?.email) ? authVM.currentUser?.email : null,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: primaryColor),
+                items: [
+                  ...(() {
+                    final uniqueEmails = <String>{};
+                    return authVM.accounts.where((acc) => uniqueEmails.add(acc['user']['email'])).map((acc) {
+                      final user = acc['user'];
+                      return DropdownMenuItem<String>(
+                        value: user['email'],
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: primaryColor.withOpacity(0.1),
+                              backgroundImage: _getImageProvider(user['profileImage']?.toString() ?? ''),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "${user['firstName']} ${user['lastName']}",
+                                style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (user['email'] == authVM.currentUser?.email)
+                              const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                          ],
+                        ),
+                      );
+                    });
+                  })(),
+                  DropdownMenuItem<String>(
+                    value: 'ADD_ACCOUNT',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.add_circle_outline, color: primaryColor, size: 24),
+                        const SizedBox(width: 12),
+                        Text(
+                          _isAr ? 'إضافة حساب جديد' : 'Add Account',
+                          style: GoogleFonts.cairo(fontSize: 14, color: primaryColor, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                onChanged: (val) async {
+                  if (val == 'ADD_ACCOUNT') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginPage()),
+                    );
+                  } else if (val != null && val != authVM.currentUser?.email) {
+                    final index = authVM.accounts.indexWhere((acc) => acc['user']['email'] == val);
+                    if (index != -1) {
+                      await authVM.switchAccount(index);
+                      if (mounted) {
+                        final role = authVM.currentUser?.role ?? 'customer';
+                        if (role == 'worker') {
+                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const WorkerDashboardPage()), (r) => false);
+                        } else {
+                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainWrapper()), (r) => false);
+                        }
+                      }
+                    }
+                  }
+                },
+              ),
             ),
           ),
         ],
@@ -325,7 +409,11 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             label: _isAr ? 'الملف العام' : 'Public Profile',
             icon: Icons.visibility_outlined,
             color: primaryColor,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerPublicProfilePage())),
+            onTap: () {
+              if (workerVM.worker?.id != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => client_profile.WorkerProfilePage(workerId: workerVM.worker!.id)));
+              }
+            },
           ),
         ],
       ),
@@ -457,7 +545,42 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             Text(_isAr ? 'معرض الأعمال' : 'Portfolio', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
-              onPressed: () {},
+              onPressed: () async {
+                final base64Image = await workerVM.pickAndConvertImage();
+                if (base64Image != null && mounted) {
+                  String title = '';
+                  String desc = '';
+                  await showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(_isAr ? 'إضافة عمل' : 'Add Work', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            decoration: InputDecoration(labelText: _isAr ? 'العنوان' : 'Title'),
+                            onChanged: (val) => title = val,
+                          ),
+                          TextField(
+                            decoration: InputDecoration(labelText: _isAr ? 'الوصف' : 'Description'),
+                            onChanged: (val) => desc = val,
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_isAr ? 'إلغاء' : 'Cancel')),
+                        ElevatedButton(
+                          onPressed: () {
+                            workerVM.addPortfolioItem(PortfolioItem(title: title, description: desc, imageUrl: 'data:image/jpeg;base64,$base64Image'));
+                            Navigator.pop(ctx);
+                          },
+                          child: Text(_isAr ? 'إضافة' : 'Add'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              },
               icon: const Icon(Icons.add, size: 16),
               label: Text(_isAr ? 'إضافة عمل' : 'Add Work', style: GoogleFonts.cairo(fontSize: 12)),
               style: TextButton.styleFrom(
@@ -486,9 +609,40 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10),
             itemCount: workerVM.portfolio.length,
-            itemBuilder: (context, index) => ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(workerVM.portfolio[index].imageUrl ?? '', fit: BoxFit.cover),
+            itemBuilder: (context, index) => Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image(image: _getImageProvider(workerVM.portfolio[index].imageUrl ?? ''), fit: BoxFit.cover),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        debugPrint('--- Tapped delete button for portfolio item index: $index');
+                        workerVM.deletePortfolioItem(index);
+                      },
+                      customBorder: const CircleBorder(),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -509,9 +663,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _buildTimePickerField(_isAr ? 'من' : 'From', '09:00 AM')),
+            Expanded(child: _buildTimePickerField(_isAr ? 'من' : 'From', _defaultFrom, true)),
             const SizedBox(width: 12),
-            Expanded(child: _buildTimePickerField(_isAr ? 'إلى' : 'To', '06:00 PM')),
+            Expanded(child: _buildTimePickerField(_isAr ? 'إلى' : 'To', _defaultTo, false)),
           ],
         ),
         const SizedBox(height: 16),
@@ -523,7 +677,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           children: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map((day) {
             final isOff = _localHours[day] == null;
             return GestureDetector(
-              onTap: () => setState(() => _localHours[day] = isOff ? WorkingHoursEntry(from: const TimeOfDay(hour: 9, minute: 0), to: const TimeOfDay(hour: 18, minute: 0)) : null),
+              onTap: () => setState(() => _localHours[day] = isOff ? WorkingHoursEntry(from: _defaultFrom, to: _defaultTo) : null),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -540,25 +694,40 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
     );
   }
 
-  Widget _buildTimePickerField(String label, String time) {
+  Widget _buildTimePickerField(String label, TimeOfDay time, bool isFrom) {
+    final timeStr = time.format(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: GoogleFonts.cairo(fontSize: 12, color: textDark, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.access_time, size: 18, color: textMuted),
-              const SizedBox(width: 8),
-              Text(time, style: GoogleFonts.cairo(color: textMuted)),
-            ],
+        InkWell(
+          onTap: () async {
+            final picked = await showTimePicker(context: context, initialTime: time);
+            if (picked != null) {
+              setState(() {
+                if (isFrom) _defaultFrom = picked; else _defaultTo = picked;
+                _localHours.forEach((key, val) {
+                  if (val != null) _localHours[key] = WorkingHoursEntry(from: _defaultFrom, to: _defaultTo);
+                });
+              });
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.access_time, size: 18, color: textMuted),
+                const SizedBox(width: 8),
+                Text(timeStr, style: GoogleFonts.cairo(color: textMuted)),
+              ],
+            ),
           ),
         ),
       ],
@@ -611,7 +780,11 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             skillsList: skills,
             hours: _localHours,
           );
-          if (success) _showSnack(_isAr ? 'تم حفظ البيانات بنجاح' : 'Profile updated successfully');
+          if (success) {
+            _showSnack(_isAr ? 'تم حفظ البيانات بنجاح' : 'Profile updated successfully');
+          } else {
+            _showSnack(workerVM.errorMessage ?? (_isAr ? 'فشل حفظ البيانات' : 'Failed to update profile'), success: false);
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,

@@ -82,10 +82,10 @@ class Order {
         (json['serviceId'] is Map ? json['serviceId']['price'] : null)
       ),
       status: json['status']?.toString() ?? 'pending',
-      scheduledFor: json['scheduledFor'] != null 
-          ? (json['scheduledFor'] is Map 
-              ? DateTime.fromMillisecondsSinceEpoch(int.tryParse(json['scheduledFor']['\$date']?.toString() ?? '0') ?? 0)
-              : DateTime.tryParse(json['scheduledFor'].toString()))
+      scheduledFor: (json['scheduledDate'] ?? json['scheduledFor']) != null 
+          ? ((json['scheduledDate'] ?? json['scheduledFor']) is Map 
+              ? DateTime.fromMillisecondsSinceEpoch(int.tryParse((json['scheduledDate'] ?? json['scheduledFor'])['\$date']?.toString() ?? '0') ?? 0)
+              : DateTime.tryParse((json['scheduledDate'] ?? json['scheduledFor']).toString()))
           : null,
       address: extractAddress(json),
       createdAt: json['createdAt'] != null 

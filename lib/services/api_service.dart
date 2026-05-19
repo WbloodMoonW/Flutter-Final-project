@@ -14,6 +14,7 @@ import '../models/chat_models.dart';
 import '../models/support_models.dart';
 import '../models/coupon_model.dart';
 import '../models/provider_application_model.dart';
+import '../models/review_model.dart';
 import 'storage_service.dart';
 import 'socket_service.dart';
 
@@ -548,6 +549,22 @@ class ApiService {
       }
     } catch (e) {}
     return null;
+  }
+
+  static Future<List<CustomerReview>> getWorkerReviews(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/workers/$id/reviews'))
+          .timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List reviewsData = (data['reviews'] ?? data) as List;
+        return reviewsData.map((r) => CustomerReview.fromMap(r)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching worker reviews: $e');
+    }
+    return [];
   }
 
   static Future<Map<String, dynamic>?> getCustomerProfile() async {

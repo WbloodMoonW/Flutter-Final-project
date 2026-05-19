@@ -168,6 +168,7 @@ class WorkerViewModel extends ChangeNotifier {
       if (_worker != null) {
         data['portfolio'] = _worker!.portfolio.map((item) => item.toMap()).toList();
         data['packages'] = _worker!.pricingPackages.map((pkg) => pkg.toMap()).toList();
+        data['pricingPackages'] = _worker!.pricingPackages.map((pkg) => pkg.toMap()).toList();
       }
       
       // Working Hours
@@ -188,6 +189,7 @@ class WorkerViewModel extends ChangeNotifier {
         data['workingHours'] = whList;
       }
 
+      debugPrint('--- updateProfileFull body payload: ${json.encode(data)}');
       await ApiService.updateWorkerProfile(data);
       await loadWorkerData();
       return true;

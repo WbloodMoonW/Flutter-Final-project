@@ -5,6 +5,7 @@ import '../models/worker_model.dart';
 import '../models/order_model.dart';
 import '../models/address_model.dart';
 import '../models/coupon_model.dart';
+import '../models/review_model.dart';
 
 class ClientViewModel extends ChangeNotifier {
   List<Category> _categories = [];
@@ -162,6 +163,19 @@ class ClientViewModel extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<List<CustomerReview>> getWorkerReviews(String id) async {
+    _setLoading(true);
+    try {
+      final reviews = await ApiService.getWorkerReviews(id);
+      return reviews;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return [];
     } finally {
       _setLoading(false);
     }

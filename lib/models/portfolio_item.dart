@@ -16,6 +16,7 @@ class PortfolioItem {
     'description': description,
     'completedAt': completionDate?.toIso8601String(),
     'images': imageUrl != null ? [imageUrl] : [],
+    'imageUrl': imageUrl,
   };
 
   factory PortfolioItem.fromMap(Map<String, dynamic> map) {

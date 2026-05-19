@@ -92,6 +92,8 @@ class AppLocalization {
     'decline_job': 'رفض المهمة',
     'stats': 'الإحصائيات',
     'recent_activity': 'النشاط الأخير',
+    'reviews': 'التقييمات',
+    'no_reviews_yet': 'لا توجد تقييمات حالياً',
   };
 
   static final Map<String, String> _english = {
@@ -153,5 +155,7 @@ class AppLocalization {
     'decline_job': 'Decline Job',
     'stats': 'Statistics',
     'recent_activity': 'Recent Activity',
+    'reviews': 'Reviews',
+    'no_reviews_yet': 'No reviews yet',
   };
 }
