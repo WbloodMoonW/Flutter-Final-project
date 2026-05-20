@@ -54,6 +54,9 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
 
   String _formatServicePrice() {
     final unit = AppLocalization.isArabic ? 'ج.م' : 'EGP';
+    if (widget.service.typeofService == 'custom' || widget.service.price == 0) {
+      return AppLocalization.isArabic ? 'حسب الاتفاق' : 'Per agreement';
+    }
     if (widget.service.typeofService == 'range' && widget.service.priceRange != null) {
       final min = widget.service.priceRange!['min'] ?? 0;
       final max = widget.service.priceRange!['max'] ?? 0;
@@ -670,7 +673,12 @@ class _ConfirmOrderPageState extends State<ConfirmOrderPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(AppLocalization.isArabic ? 'الإجمالي' : 'Total', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text('${total.toStringAsFixed(0)} EGP', style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: primaryTeal, fontSize: 20)),
+              Text(
+                (widget.service.typeofService == 'custom' || widget.service.price == 0)
+                    ? (AppLocalization.isArabic ? 'حسب الاتفاق' : 'Per agreement')
+                    : '${total.toStringAsFixed(0)} EGP',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: primaryTeal, fontSize: 20),
+              ),
             ],
           ),
         ],

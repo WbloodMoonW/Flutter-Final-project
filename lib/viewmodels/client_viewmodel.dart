@@ -5,6 +5,7 @@ import '../models/worker_model.dart';
 import '../models/order_model.dart';
 import '../models/address_model.dart';
 import '../models/coupon_model.dart';
+import '../models/review_model.dart';
 
 class ClientViewModel extends ChangeNotifier {
   List<Category> _categories = [];
@@ -93,7 +94,12 @@ class ClientViewModel extends ChangeNotifier {
         lng: lng,
         postcode: postcode,
       );
-      _filteredWorkers = List.from(_workers);
+      
+      if (_searchQuery.isNotEmpty) {
+        searchWorkers(_searchQuery);
+      } else {
+        _filteredWorkers = List.from(_workers);
+      }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -112,6 +118,9 @@ class ClientViewModel extends ChangeNotifier {
   Future<void> fetchMyOrders() async {
     _setLoading(true);
     try {
+      final user = await ApiService.getCustomerProfile();
+      debugPrint('>>> fetchMyOrders: CURRENT USER ID = ${user?['_id'] ?? user?['id']}');
+      
       _myOrders = await ApiService.getCustomerOrders();
     } catch (e) {
       _errorMessage = e.toString();
@@ -140,15 +149,53 @@ class ClientViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  String _searchQuery = '';
+  String get searchQuery => _searchQuery;
+
   void searchWorkers(String query) {
+    _searchQuery = query;
     if (query.isEmpty) {
       _filteredWorkers = List.from(_workers);
     } else {
-      final lowercaseQuery = query.toLowerCase();
+      final lowercaseQuery = query.toLowerCase().trim();
+      
+      bool matchesKeyword(String? fieldText) {
+        if (fieldText == null || fieldText.isEmpty) return false;
+        final f = fieldText.toLowerCase();
+        
+        // Direct match
+        if (f.contains(lowercaseQuery)) return true;
+        
+        // Translation/synonym groups
+        final groups = [
+          {'plumber', 'plumbing', 'سباك', 'سباكة'},
+          {'electrician', 'electricity', 'electrification', 'كهربائي', 'كهرباء'},
+          {'carpenter', 'carpentry', 'نجار', 'نجارة'},
+          {'painter', 'painting', 'نقاش', 'دهان', 'نقاشة', 'دهانات'},
+          {'ac', 'air conditioner', 'air conditioning', 'تكييف', 'فني تكييف'},
+          {'cleaning', 'cleaner', 'housekeeping', 'تنظيف', 'منظف', 'خادمة'},
+          {'blacksmith', 'حداد', 'حدادة', 'حدادين'}
+        ];
+        
+        for (var group in groups) {
+          final queryMatch = group.any((word) => lowercaseQuery.contains(word) || word.contains(lowercaseQuery));
+          if (queryMatch) {
+            final fieldMatch = group.any((word) => f.contains(word));
+            if (fieldMatch) return true;
+          }
+        }
+        
+        return false;
+      }
+
       _filteredWorkers = _workers.where((w) {
-        return w.user.fullName.toLowerCase().contains(lowercaseQuery) ||
-               (w.title?.toLowerCase().contains(lowercaseQuery) ?? false) ||
-               (w.location?.toLowerCase().contains(lowercaseQuery) ?? false);
+        if (w.user.fullName.toLowerCase().contains(lowercaseQuery)) return true;
+        if (matchesKeyword(w.title)) return true;
+        if (matchesKeyword(w.category?.name)) return true;
+        if (w.skills.any((skill) => matchesKeyword(skill))) return true;
+        if (matchesKeyword(w.location)) return true;
+        if (w.services.any((service) => matchesKeyword(service.name) || matchesKeyword(service.description))) return true;
+        return false;
       }).toList();
     }
     notifyListeners();
@@ -162,6 +209,19 @@ class ClientViewModel extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<List<CustomerReview>> getWorkerReviews(String id) async {
+    _setLoading(true);
+    try {
+      final reviews = await ApiService.getWorkerReviews(id);
+      return reviews;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return [];
     } finally {
       _setLoading(false);
     }

@@ -58,6 +58,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            _buildContactButton(),
+                            const SizedBox(height: 30),
                             _buildInfoSection(),
                             const SizedBox(height: 30),
                             _buildBioSection(),
@@ -69,8 +71,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                             _buildWorkingHoursSection(),
                             const SizedBox(height: 30),
                             _buildStatsSection(),
-                            const SizedBox(height: 40),
-                            _buildContactButton(),
+                            const SizedBox(height: 30),
+                            _buildPortfolioSection(),
                             const SizedBox(height: 40),
                           ],
                         ),
@@ -79,6 +81,22 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                   ],
                 ),
     );
+  }
+
+  ImageProvider _getProfileImageProvider(String url) {
+    if (url.startsWith('http') || url.startsWith('https')) {
+      return NetworkImage(url);
+    }
+    if (url.startsWith('/')) {
+      return NetworkImage('https://angezny.onrender.com$url');
+    }
+    try {
+      final base64String = url.contains(',') ? url.split(',').last : url;
+      final cleaned = base64String.replaceAll(RegExp(r'\s+'), '');
+      return MemoryImage(base64Decode(cleaned));
+    } catch (e) {
+      return const NetworkImage('https://ui-avatars.com/api/?name=Error');
+    }
   }
 
   Widget _buildSliverAppBar() {
@@ -100,11 +118,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           children: [
             if (profileImage != null && profileImage.isNotEmpty)
               Image(
-                image: profileImage.startsWith('data:image') 
-                  ? MemoryImage(base64Decode(profileImage.split(',').last)) 
-                  : (profileImage.startsWith('http') 
-                      ? NetworkImage(profileImage) 
-                      : NetworkImage('https://angezny.onrender.com$profileImage')) as ImageProvider,
+                image: _getProfileImageProvider(profileImage),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
                   color: primaryTeal.withOpacity(0.1),
@@ -257,7 +271,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                 ),
               ),
               Text(
-                '${service.price.toStringAsFixed(0)} ${AppLocalization.isArabic ? "ج.م" : "EGP"}',
+                (service.typeofService == 'custom' || service.price == 0)
+                    ? (AppLocalization.isArabic ? 'حسب الاتفاق' : 'Per agreement')
+                    : '${service.price.toStringAsFixed(0)} ${AppLocalization.isArabic ? "ج.م" : "EGP"}',
                 style: GoogleFonts.cairo(color: primaryTeal, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
@@ -484,6 +500,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         case 'fixed': return 'سعر ثابت';
         case 'hourly': return 'سعر بالساعة';
         case 'range': return 'نطاق سعري';
+        case 'custom': return 'حسب الاتفاق';
         default: return type;
       }
     } else {
@@ -491,8 +508,49 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         case 'fixed': return 'Fixed Price';
         case 'hourly': return 'Hourly Rate';
         case 'range': return 'Price Range';
+        case 'custom': return 'Per Agreement';
         default: return type;
       }
     }
+  }
+
+  Widget _buildPortfolioSection() {
+    if (worker!.portfolio.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          AppLocalization.isArabic ? 'معرض الأعمال' : 'Portfolio',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const SizedBox(height: 16),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, 
+            crossAxisSpacing: 10, 
+            mainAxisSpacing: 10,
+          ),
+          itemCount: worker!.portfolio.length,
+          itemBuilder: (context, index) {
+            final item = worker!.portfolio[index];
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image(
+                image: _getProfileImageProvider(item.imageUrl ?? ''),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: primaryTeal.withOpacity(0.1),
+                  child: Icon(Icons.image_not_supported, color: primaryTeal),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 }

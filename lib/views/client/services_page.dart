@@ -6,6 +6,7 @@ import '../../core/localization.dart';
 import '../../viewmodels/client_viewmodel.dart';
 import 'worker_profile_page.dart';
 import 'map_picker_page.dart';
+import 'worker_reviews_page.dart';
 
 class ServicesPage extends StatefulWidget {
   const ServicesPage({super.key});
@@ -22,18 +23,29 @@ class _ServicesPageState extends State<ServicesPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchWorkers();
+      _fetchWorkers(force: false);
     });
   }
 
-  Future<void> _fetchWorkers() async {
+  Future<void> _fetchWorkers({bool force = false}) async {
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
-    await clientVM.fetchWorkers();
+    if (force || clientVM.workers.isEmpty) {
+      await clientVM.fetchWorkers();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final clientVM = Provider.of<ClientViewModel>(context);
+
+    // Sync external search updates (e.g. from home page search bar)
+    if (_searchController.text != clientVM.searchQuery) {
+      _searchController.text = clientVM.searchQuery;
+      // Put cursor at the end of text
+      _searchController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _searchController.text.length),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -83,7 +95,7 @@ class _ServicesPageState extends State<ServicesPage> {
             ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _fetchWorkers,
+                onRefresh: () => _fetchWorkers(force: true),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(24),
@@ -315,6 +327,24 @@ class _ServicesPageState extends State<ServicesPage> {
                     children: [
                       Text(price, style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: primaryTeal)),
                       const Spacer(),
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WorkerReviewsPage(workerId: id),
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryTeal,
+                          side: BorderSide(color: primaryTeal),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Text(AppLocalization.translate('reviews'), style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: () {
                           Navigator.push(

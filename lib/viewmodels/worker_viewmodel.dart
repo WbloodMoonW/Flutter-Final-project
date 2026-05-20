@@ -105,6 +105,15 @@ class WorkerViewModel extends ChangeNotifier {
       _orders = await ApiService.getWorkerOrders();
       _wallet = await ApiService.getWorkerWallet() ?? {};
 
+      try {
+        final rawServices = await ApiService.getWorkerServices();
+        if (_worker != null) {
+          _worker = _worker!.copyWith(services: rawServices);
+        }
+      } catch (e) {
+        debugPrint('Error loading worker services: $e');
+      }
+
       // Fetch categories
       final cats = await ApiService.getCategories();
       _categories = cats.map((c) => c.toJson()).toList();
@@ -168,6 +177,7 @@ class WorkerViewModel extends ChangeNotifier {
       if (_worker != null) {
         data['portfolio'] = _worker!.portfolio.map((item) => item.toMap()).toList();
         data['packages'] = _worker!.pricingPackages.map((pkg) => pkg.toMap()).toList();
+        data['pricingPackages'] = _worker!.pricingPackages.map((pkg) => pkg.toMap()).toList();
       }
       
       // Working Hours
@@ -188,6 +198,7 @@ class WorkerViewModel extends ChangeNotifier {
         data['workingHours'] = whList;
       }
 
+      debugPrint('--- updateProfileFull body payload: ${json.encode(data)}');
       await ApiService.updateWorkerProfile(data);
       await loadWorkerData();
       return true;
@@ -359,7 +370,7 @@ class WorkerViewModel extends ChangeNotifier {
     return null;
   }
 
-  Future<bool> updateOrderStatus(String orderId, String status) async {
+  Future<bool> updateOrderStatus(String orderId, String status, {String? reason}) async {
     try {
       Map<String, dynamic>? report;
       if (status == 'completed') {
@@ -371,7 +382,7 @@ class WorkerViewModel extends ChangeNotifier {
         };
       }
       
-      await ApiService.updateOrderStatus(orderId, status, completionReport: report);
+      await ApiService.updateOrderStatus(orderId, status, completionReport: report, reason: reason);
       await fetchData();
       return true;
     } catch (e) {

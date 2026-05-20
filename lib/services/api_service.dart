@@ -8,12 +8,9 @@ import '../models/service_model.dart';
 import '../models/category_model.dart';
 import '../models/order_model.dart';
 import '../models/notification_model.dart';
-import '../models/address_model.dart';
-import '../models/payment_method_model.dart';
 import '../models/chat_models.dart';
-import '../models/support_models.dart';
 import '../models/coupon_model.dart';
-import '../models/provider_application_model.dart';
+import '../models/review_model.dart';
 import 'storage_service.dart';
 import 'socket_service.dart';
 
@@ -257,7 +254,15 @@ class ApiService {
         } else if (data is Map) {
           ordersData = (data['orders'] ?? data['data'] ?? data['items'] ?? []) as List;
         }
-        return ordersData.map((o) => Order.fromJson(o)).toList();
+        final List<Order> list = [];
+        for (var o in ordersData) {
+          try {
+            list.add(Order.fromJson(o));
+          } catch (err) {
+            debugPrint('Skipping malformed worker order: $err, JSON: $o');
+          }
+        }
+        return list;
       }
     } catch (e) {
       debugPrint('Error in getWorkerOrders: $e');
@@ -550,6 +555,22 @@ class ApiService {
     return null;
   }
 
+  static Future<List<CustomerReview>> getWorkerReviews(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/workers/$id/reviews'))
+          .timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List reviewsData = (data['reviews'] ?? data) as List;
+        return reviewsData.map((r) => CustomerReview.fromMap(r)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching worker reviews: $e');
+    }
+    return [];
+  }
+
   static Future<Map<String, dynamic>?> getCustomerProfile() async {
     try {
       final token = await StorageService.getToken();
@@ -581,15 +602,39 @@ class ApiService {
   static Future<List<Order>> getCustomerOrders() async {
     try {
       final token = await StorageService.getToken();
+      debugPrint('>>> getCustomerOrders: token=${token != null ? "present" : "NULL"}');
       final response = await http.get(
-        Uri.parse('$_baseUrl/customer/orders'),
+        //https://angezny.onrender.com/api/customer/orders?status=history&page=1&limit=10
+        Uri.parse('$_baseUrl/customer/orders?status=history'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
+      debugPrint('>>> getCustomerOrders: statusCode=${response.statusCode}');
+      debugPrint('>>> getCustomerOrders: body=${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return (data['orders'] as List).map((o) => Order.fromJson(o)).toList();
+        List<dynamic> ordersData = [];
+        if (data is List) {
+          ordersData = data;
+        } else if (data is Map) {
+          ordersData = (data['orders'] ?? data['data'] ?? data['item'] ?? []) as List;
+        }
+        debugPrint('>>> getCustomerOrders: found ${ordersData.length} raw orders');
+        final List<Order> list = [];
+        for (var o in ordersData) {
+          try {
+            final order = Order.fromJson(o);
+            debugPrint('>>> Parsed order id=${order.id}, status="${order.status}"');
+            list.add(order);
+          } catch (err) {
+            debugPrint('Skipping malformed customer order: $err, JSON: $o');
+          }
+        }
+        debugPrint('>>> getCustomerOrders: returning ${list.length} orders');
+        return list;
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Error in getCustomerOrders: $e');
+    }
     return [];
   }
 
@@ -768,12 +813,14 @@ class ApiService {
     }
   }
 
-  static Future<void> updateOrderStatus(String orderId, String status, {Map<String, dynamic>? completionReport}) async {
+  static Future<void> updateOrderStatus(String orderId, String status, {Map<String, dynamic>? completionReport, String? reason}) async {
     try {
       final token = await StorageService.getToken();
       final body = {
         'status': status,
         if (completionReport != null) 'completionReport': completionReport,
+        if (reason != null) 'reason': reason,
+        if (reason != null) 'rejectionReason': reason,
       };
       await http.put(
         Uri.parse('$_baseUrl/worker/orders/$orderId/status'),
