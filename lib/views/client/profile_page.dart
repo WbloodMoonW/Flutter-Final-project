@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
+import '../../services/cloudinary_service.dart';
 import '../../core/localization.dart';
 import '../auth/login_view.dart';
 import '../auth/verification_view.dart';
@@ -27,7 +28,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final Color textMuted = const Color(0xFF8E8E93);
   bool isEditing = false;
   File? _pickedImage;
-  String? _base64Image;
+  String? _cloudinaryUrl;
 
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
@@ -56,33 +57,49 @@ class _ProfilePageState extends State<ProfilePage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 50,
+      imageQuality: 70,
     );
     if (image != null) {
       final bytes = await image.readAsBytes();
       setState(() {
         _pickedImage = File(image.path);
-        _base64Image = "data:image/png;base64,${base64Encode(bytes)}";
       });
+      // Upload to Cloudinary
+      final url = await CloudinaryService.uploadImage(bytes, image.name);
+      if (url != null && mounted) {
+        setState(() {
+          _cloudinaryUrl = url;
+        });
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalization.isArabic ? 'فشل رفع الصورة' : 'Image upload failed')),
+        );
+        setState(() {
+          _pickedImage = null;
+        });
+      }
     }
   }
 
   Future<void> _updateProfile() async {
     final authVM = Provider.of<AuthViewModel>(context, listen: false);
-    final success = await authVM.updateProfile({
+    final data = {
       'firstName': _firstNameController.text.trim(),
       'lastName': _lastNameController.text.trim(),
       'phone': _phoneController.text.trim(),
       'email': _emailController.text.trim(),
-      'profileImage': _base64Image,
-    });
+    };
+    if (_cloudinaryUrl != null) {
+      data['profileImage'] = _cloudinaryUrl!;
+    }
+    final success = await authVM.updateProfile(data);
 
     if (success) {
       if (mounted) {
         setState(() {
           isEditing = false;
           _pickedImage = null;
-          _base64Image = null;
+          _cloudinaryUrl = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalization.isArabic ? 'تم تحديث الملف الشخصي' : 'Profile updated successfully')),

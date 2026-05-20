@@ -270,6 +270,40 @@ class ApiService {
     return [];
   }
 
+  static Future<List<Order>> getWorkerHistoryOrders() async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) return [];
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/worker/orders?status=history'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<dynamic> ordersData = [];
+        if (data is List) {
+          ordersData = data;
+        } else if (data is Map) {
+          ordersData = (data['orders'] ?? data['data'] ?? data['items'] ?? []) as List;
+        }
+        final List<Order> list = [];
+        for (var o in ordersData) {
+          try {
+            list.add(Order.fromJson(o));
+          } catch (err) {
+            debugPrint('Skipping malformed worker history order: $err, JSON: $o');
+          }
+        }
+        return list;
+      }
+    } catch (e) {
+      debugPrint('Error in getWorkerHistoryOrders: $e');
+    }
+    return [];
+  }
+
   static Future<Map<String, dynamic>?> getWorkerWallet() async {
     try {
       final token = await StorageService.getToken();
@@ -620,7 +654,8 @@ class ApiService {
         }
         debugPrint('>>> getCustomerOrders: found ${ordersData.length} raw orders');
         final List<Order> list = [];
-        for (var o in ordersData) {
+        for (var i = 0; i < ordersData.length; i++) {
+          final o = ordersData[i];
           try {
             final order = Order.fromJson(o);
             debugPrint('>>> Parsed order id=${order.id}, status="${order.status}"');
@@ -931,6 +966,31 @@ class ApiService {
       }
     } catch (e) {
       throw Exception(_handleError(e));
+    }
+  }
+
+  static Future<bool> createReview(String serviceRequestId, int rating, String comment) async {
+    try {
+      final token = await StorageService.getToken();
+      final body = {
+        'serviceRequestId': serviceRequestId,
+        'rating': rating,
+        'comment': comment,
+      };
+      
+      final response = await http.post(
+        Uri.parse('$_baseUrl/reviews'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 15));
+      
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('Error creating review: $e');
+      return false;
     }
   }
 }

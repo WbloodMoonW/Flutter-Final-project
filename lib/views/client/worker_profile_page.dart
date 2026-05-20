@@ -6,6 +6,7 @@ import '../../core/localization.dart';
 import '../../models/worker_model.dart';
 import '../../models/working_hours.dart';
 import '../../viewmodels/client_viewmodel.dart';
+import '../../models/portfolio_item.dart';
 import 'chat_page.dart';
 import 'confirm_order_page.dart';
 
@@ -84,18 +85,30 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   ImageProvider _getProfileImageProvider(String url) {
-    if (url.startsWith('http') || url.startsWith('https')) {
+    if (url.isEmpty) {
+      return const NetworkImage('https://ui-avatars.com/api/?name=Worker&background=006D5B&color=fff');
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
       return NetworkImage(url);
+    }
+    if (url.startsWith('/9j/') || url.startsWith('data:image') || url.length > 500) {
+      // Treat as base64
+      try {
+        final base64String = url.contains(',') ? url.split(',').last : url;
+        final cleaned = base64String.replaceAll(RegExp(r'\s+'), '');
+        return MemoryImage(base64Decode(cleaned));
+      } catch (_) {
+        return const NetworkImage('https://ui-avatars.com/api/?name=Worker&background=006D5B&color=fff');
+      }
     }
     if (url.startsWith('/')) {
       return NetworkImage('https://angezny.onrender.com$url');
     }
     try {
-      final base64String = url.contains(',') ? url.split(',').last : url;
-      final cleaned = base64String.replaceAll(RegExp(r'\s+'), '');
+      final cleaned = url.replaceAll(RegExp(r'\s+'), '');
       return MemoryImage(base64Decode(cleaned));
-    } catch (e) {
-      return const NetworkImage('https://ui-avatars.com/api/?name=Error');
+    } catch (_) {
+      return const NetworkImage('https://ui-avatars.com/api/?name=Worker&background=006D5B&color=fff');
     }
   }
 
@@ -537,20 +550,107 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
           itemCount: worker!.portfolio.length,
           itemBuilder: (context, index) {
             final item = worker!.portfolio[index];
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image(
-                image: _getProfileImageProvider(item.imageUrl ?? ''),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: primaryTeal.withOpacity(0.1),
-                  child: Icon(Icons.image_not_supported, color: primaryTeal),
+            return GestureDetector(
+              onTap: () => _showPortfolioImage(context, item),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image(
+                  image: _getProfileImageProvider(item.imageUrl ?? ''),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: primaryTeal.withOpacity(0.1),
+                    child: Icon(Icons.image_not_supported, color: primaryTeal),
+                  ),
                 ),
               ),
             );
           },
         ),
       ],
+    );
+  }
+
+  void _showPortfolioImage(BuildContext context, PortfolioItem item) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.9),
+      builder: (context) {
+        return GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Stack(
+              children: [
+                Center(
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: Image(
+                      image: _getProfileImageProvider(item.imageUrl ?? ''),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Icon(
+                        Icons.image_not_supported,
+                        color: Colors.white54,
+                        size: 64,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.only(top: 40, bottom: 30, left: 20, right: 20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.8),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          style: GoogleFonts.cairo(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (item.description.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            item.description,
+                            style: GoogleFonts.cairo(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

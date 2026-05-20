@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../models/category_model.dart';
 import '../models/worker_model.dart';
@@ -24,6 +25,8 @@ class ClientViewModel extends ChangeNotifier {
   String? _selectedPostcode;
   String? _selectedAddress;
 
+  final Set<String> _reviewedOrderIds = {};
+
   List<Category> get categories => _categories;
   List<Worker> get workers => _workers;
   Coupon? get featuredCoupon => _featuredCoupon;
@@ -31,6 +34,7 @@ class ClientViewModel extends ChangeNotifier {
   List<Order> get myOrders => _myOrders;
   List<Address> get myAddresses => _myAddresses;
   List<String> get suggestions => _suggestions;
+  Set<String> get reviewedOrderIds => _reviewedOrderIds;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -40,9 +44,20 @@ class ClientViewModel extends ChangeNotifier {
   String? get selectedAddress => _selectedAddress;
   
   Future<void> fetchAll() async {
+    await _loadReviewedOrders();
     await fetchCategories();
     await fetchWorkers();
     await fetchMyOrders();
+  }
+
+  Future<void> _loadReviewedOrders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('reviewed_orders');
+      if (list != null) {
+        _reviewedOrderIds.addAll(list);
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchCategories() async {
@@ -118,6 +133,7 @@ class ClientViewModel extends ChangeNotifier {
   Future<void> fetchMyOrders() async {
     _setLoading(true);
     try {
+      await _loadReviewedOrders();
       final user = await ApiService.getCustomerProfile();
       debugPrint('>>> fetchMyOrders: CURRENT USER ID = ${user?['_id'] ?? user?['id']}');
       
@@ -266,6 +282,23 @@ class ClientViewModel extends ChangeNotifier {
 
   Future<Coupon?> validateCoupon(String code, {double? amount, String? categoryId}) async {
     return await ApiService.validateCoupon(code, amount: amount, categoryId: categoryId);
+  }
+
+  Future<bool> submitReview(String serviceRequestId, int rating, String comment) async {
+    _setLoading(true);
+    final success = await ApiService.createReview(serviceRequestId, rating, comment);
+    if (success) {
+      _reviewedOrderIds.add(serviceRequestId);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('reviewed_orders', _reviewedOrderIds.toList());
+      } catch (_) {}
+      
+      // Re-fetch workers so their updated average rating appears on the services tab
+      await fetchWorkers();
+    }
+    _setLoading(false);
+    return success;
   }
 
   void _setLoading(bool value) {
