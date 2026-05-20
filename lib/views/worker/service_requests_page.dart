@@ -17,103 +17,12 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   final Color textDark = const Color(0xFF1A1A2E);
   final Color textMuted = const Color(0xFF8E8E93);
 
-  int _activeSubTab = 0;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<WorkerViewModel>(context, listen: false).fetchData();
     });
-  }
-
-  Widget _buildTabBar(bool isAr, WorkerViewModel workerVM) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _activeSubTab = 0);
-                workerVM.fetchData();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: _activeSubTab == 0 ? primaryColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    isAr ? 'طلبات نشطة' : 'Active Requests',
-                    style: GoogleFonts.cairo(
-                      color: _activeSubTab == 0 ? Colors.white : Colors.grey[600],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _activeSubTab = 1);
-                workerVM.fetchData();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: _activeSubTab == 1 ? primaryColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    isAr ? 'سجل الطلبات' : 'Requests History',
-                    style: GoogleFonts.cairo(
-                      color: _activeSubTab == 1 ? Colors.white : Colors.grey[600],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isAr) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - 180,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.assignment_late_outlined, size: 64, color: textMuted.withOpacity(0.5)),
-              const SizedBox(height: 16),
-              Text(
-                _activeSubTab == 0
-                    ? (isAr ? 'لا توجد طلبات نشطة حالياً' : 'No active requests currently')
-                    : (isAr ? 'سجل الطلبات فارغ' : 'Requests history is empty'),
-                style: GoogleFonts.cairo(color: textMuted, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -139,41 +48,54 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       ),
       body: Consumer<WorkerViewModel>(
         builder: (context, workerVM, _) {
-          final filteredRequests = workerVM.orders.where((order) {
-            final status = order.status.toLowerCase().trim();
-            if (_activeSubTab == 1) {
-              return status == 'completed' || status == 'rejected' || status == 'cancelled';
-            } else {
-              return status == 'pending' || status == 'accepted' || status == 'in_progress';
-            }
-          }).toList();
+          final requests = workerVM.orders;
 
-          if (workerVM.isLoading && workerVM.orders.isEmpty) {
+          if (workerVM.isLoading) {
             return Center(
               child: CircularProgressIndicator(color: primaryColor),
+            );
+          }
+
+          if (requests.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => workerVM.fetchData(),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height - 150,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.assignment_late_outlined,
+                          size: 64,
+                          color: textMuted.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          isAr ? 'لا توجد طلبات حالياً' : 'No requests yet',
+                          style: GoogleFonts.cairo(color: textMuted, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             );
           }
 
           return RefreshIndicator(
             onRefresh: () => workerVM.fetchData(),
             color: primaryColor,
-            child: Column(
-              children: [
-                _buildTabBar(isAr, workerVM),
-                Expanded(
-                  child: filteredRequests.isEmpty
-                      ? _buildEmptyState(isAr)
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          itemCount: filteredRequests.length,
-                          itemBuilder: (context, index) {
-                            final r = filteredRequests[index];
-                            return _buildRequestCard(r, isAr, workerVM);
-                          },
-                        ),
-                ),
-              ],
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              itemCount: requests.length,
+              itemBuilder: (context, index) {
+                final r = requests[index];
+                return _buildRequestCard(r, isAr, workerVM);
+              },
             ),
           );
         },

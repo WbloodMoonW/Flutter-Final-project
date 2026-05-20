@@ -277,8 +277,117 @@ class _BookingsPageState extends State<BookingsPage> {
               ),
             ],
           ),
+          if (order.status.toLowerCase() == 'completed' && 
+              !order.hasReviewed &&
+              !Provider.of<ClientViewModel>(context, listen: false).reviewedOrderIds.contains(order.id)) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => _showReviewDialog(order),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryTeal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  elevation: 0,
+                ),
+                child: Text(
+                  AppLocalization.isArabic ? 'أترك تقييم' : 'Leave Review',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  void _showReviewDialog(Order order) {
+    final isAr = AppLocalization.isArabic;
+    int rating = 5;
+    final commentController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                isAr ? 'تقييم الخدمة' : 'Rate Service',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      return IconButton(
+                        icon: Icon(
+                          index < rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 32,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            rating = index + 1;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: commentController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: isAr ? 'اكتب رأيك هنا (اختياري)' : 'Write your review here (optional)',
+                      hintStyle: GoogleFonts.cairo(fontSize: 13, color: Colors.grey),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(isAr ? 'إلغاء' : 'Cancel', style: GoogleFonts.cairo(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final success = await Provider.of<ClientViewModel>(this.context, listen: false).submitReview(
+                      order.id,
+                      rating,
+                      commentController.text.trim(),
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(
+                        content: Text(
+                          success 
+                            ? (isAr ? 'تم إرسال التقييم بنجاح' : 'Review submitted successfully')
+                            : (isAr ? 'فشل إرسال التقييم' : 'Failed to submit review'),
+                          style: GoogleFonts.cairo(),
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryTeal,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(isAr ? 'إرسال' : 'Submit', style: GoogleFonts.cairo(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

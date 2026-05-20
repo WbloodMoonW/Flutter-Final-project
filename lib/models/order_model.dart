@@ -11,6 +11,7 @@ class Order {
   final DateTime? scheduledFor;
   final String? address;
   final DateTime createdAt;
+  final bool hasReviewed;
 
   Order({
     required this.id,
@@ -23,6 +24,7 @@ class Order {
     this.scheduledFor,
     this.address,
     required this.createdAt,
+    this.hasReviewed = false,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -93,6 +95,7 @@ class Order {
               ? DateTime.fromMillisecondsSinceEpoch(int.tryParse(json['createdAt']['\$date']?.toString() ?? '0') ?? 0)
               : DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now())
           : DateTime.now(),
+      hasReviewed: json['review'] != null,
     );
   }
 }

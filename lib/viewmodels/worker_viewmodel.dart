@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import '../services/cloudinary_service.dart';
 import '../models/worker_model.dart';
 import '../models/service_model.dart';
 import '../models/portfolio_item.dart';
@@ -13,6 +15,7 @@ import '../models/category_model.dart';
 class WorkerViewModel extends ChangeNotifier {
   Worker? _worker;
   List<Order> _orders = [];
+  List<Order> _historyOrders = [];
   Map<String, dynamic> _wallet = {};
   bool _isLoading = false;
   String? _errorMessage;
@@ -32,6 +35,7 @@ class WorkerViewModel extends ChangeNotifier {
 
   Worker? get worker => _worker;
   List<Order> get orders => _orders;
+  List<Order> get historyOrders => _historyOrders;
   Map<String, dynamic> get wallet => _wallet;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -103,6 +107,7 @@ class WorkerViewModel extends ChangeNotifier {
       }
 
       _orders = await ApiService.getWorkerOrders();
+      _historyOrders = await ApiService.getWorkerHistoryOrders();
       _wallet = await ApiService.getWorkerWallet() ?? {};
 
       try {
@@ -145,7 +150,7 @@ class WorkerViewModel extends ChangeNotifier {
     List<String>? skillsList,
     bool? company,
     Map<String, WorkingHoursEntry?>? hours,
-    String? profileImageBase64,
+    String? profileImageUrl,
   }) async {
     try {
       final Map<String, dynamic> data = {};
@@ -171,7 +176,7 @@ class WorkerViewModel extends ChangeNotifier {
         data['typeOfWorker'] = company ? 'company' : 'individual';
         data['typeofWorker'] = data['typeOfWorker'];
       }
-      if (profileImageBase64 != null) data['profileImage'] = profileImageBase64;
+      if (profileImageUrl != null) data['profileImage'] = profileImageUrl;
       
       // Always include current portfolio and packages to match web behavior
       if (_worker != null) {
@@ -356,18 +361,25 @@ class WorkerViewModel extends ChangeNotifier {
   static String formatDate(DateTime d) => "${d.year}/${d.month}/${d.day}";
   static String formatTime(TimeOfDay t) => "${t.hour}:${t.minute.toString().padLeft(2, '0')}";
 
-  Future<String?> pickAndConvertImage() async {
+  /// Picks an image from gallery, uploads to Cloudinary, returns the URL
+  Future<String?> pickAndUploadImage() async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
       if (image != null) {
         final bytes = await image.readAsBytes();
-        return base64Encode(bytes);
+        final url = await CloudinaryService.uploadImage(bytes, image.name);
+        return url;
       }
     } catch (e) {
-      debugPrint('Error picking image: $e');
+      debugPrint('Error picking/uploading image: $e');
     }
     return null;
+  }
+
+  /// Legacy method kept for backward compatibility
+  Future<String?> pickAndConvertImage() async {
+    return pickAndUploadImage();
   }
 
   Future<bool> updateOrderStatus(String orderId, String status, {String? reason}) async {
@@ -393,9 +405,9 @@ class WorkerViewModel extends ChangeNotifier {
   }
 
   Future<bool> updateProfileImage() async {
-    final base64 = await pickAndConvertImage();
-    if (base64 != null) {
-      return updateProfileFull(profileImageBase64: base64);
+    final url = await pickAndUploadImage();
+    if (url != null) {
+      return updateProfileFull(profileImageUrl: url);
     }
     return false;
   }

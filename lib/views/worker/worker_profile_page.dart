@@ -546,8 +546,8 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
             const Spacer(),
             TextButton.icon(
               onPressed: () async {
-                final base64Image = await workerVM.pickAndConvertImage();
-                if (base64Image != null && mounted) {
+                final imageUrl = await workerVM.pickAndUploadImage();
+                if (imageUrl != null && mounted) {
                   String title = '';
                   String desc = '';
                   await showDialog(
@@ -571,7 +571,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_isAr ? 'إلغاء' : 'Cancel')),
                         ElevatedButton(
                           onPressed: () {
-                            workerVM.addPortfolioItem(PortfolioItem(title: title, description: desc, imageUrl: 'data:image/jpeg;base64,$base64Image'));
+                            workerVM.addPortfolioItem(PortfolioItem(title: title, description: desc, imageUrl: imageUrl));
                             Navigator.pop(ctx);
                           },
                           child: Text(_isAr ? 'إضافة' : 'Add'),
@@ -898,7 +898,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   Widget _buildHistoryTab(WorkerViewModel workerVM) {
-    final history = workerVM.orders.where((o) => o.status.toLowerCase() == 'completed').toList();
+    final history = workerVM.historyOrders;
     if (history.isEmpty) {
       return Center(
         child: Padding(
