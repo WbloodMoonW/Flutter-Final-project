@@ -271,7 +271,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
                 ),
               ),
               Text(
-                '${service.price.toStringAsFixed(0)} ${AppLocalization.isArabic ? "ج.م" : "EGP"}',
+                (service.typeofService == 'custom' || service.price == 0)
+                    ? (AppLocalization.isArabic ? 'حسب الاتفاق' : 'Per agreement')
+                    : '${service.price.toStringAsFixed(0)} ${AppLocalization.isArabic ? "ج.م" : "EGP"}',
                 style: GoogleFonts.cairo(color: primaryTeal, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
@@ -498,6 +500,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         case 'fixed': return 'سعر ثابت';
         case 'hourly': return 'سعر بالساعة';
         case 'range': return 'نطاق سعري';
+        case 'custom': return 'حسب الاتفاق';
         default: return type;
       }
     } else {
@@ -505,6 +508,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
         case 'fixed': return 'Fixed Price';
         case 'hourly': return 'Hourly Rate';
         case 'range': return 'Price Range';
+        case 'custom': return 'Per Agreement';
         default: return type;
       }
     }

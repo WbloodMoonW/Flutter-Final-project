@@ -14,18 +14,99 @@ class BookingsPage extends StatefulWidget {
 
 class _BookingsPageState extends State<BookingsPage> {
   final Color primaryTeal = const Color(0xFF006D5B);
+  int _activeSubTab = 0; // 0 for Pending Bookings, 1 for Booking History
 
   @override
   void initState() {
     super.initState();
+    debugPrint(">>> BookingsPage initState called");
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint(">>> BookingsPage post-frame callback running fetchMyOrders");
       Provider.of<ClientViewModel>(context, listen: false).fetchMyOrders();
     });
+  }
+
+  Widget _buildTabBar() {
+    final isAr = AppLocalization.isArabic;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _activeSubTab = 0);
+                Provider.of<ClientViewModel>(context, listen: false).fetchMyOrders();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _activeSubTab == 0 ? primaryTeal : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    isAr ? 'حجوزات معلقة' : 'Pending Bookings',
+                    style: GoogleFonts.cairo(
+                      color: _activeSubTab == 0 ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _activeSubTab = 1);
+                Provider.of<ClientViewModel>(context, listen: false).fetchMyOrders();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _activeSubTab == 1 ? primaryTeal : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    isAr ? 'سجل الحجوزات' : 'Booking History',
+                    style: GoogleFonts.cairo(
+                      color: _activeSubTab == 1 ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final clientVM = Provider.of<ClientViewModel>(context);
+    final filteredOrders = clientVM.myOrders.where((order) {
+  final status = order.status.toLowerCase().trim(); // <-- add .trim()
+  
+  // Temporary debug
+  debugPrint('Order status: "$status", tab: $_activeSubTab');
+  
+  if (_activeSubTab == 1) {
+    return status == 'completed' || status == 'rejected' || status == 'cancelled';
+  } else {
+    return status == 'pending' || status == 'accepted' || status == 'in_progress';
+  }
+}).toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -42,26 +123,35 @@ class _BookingsPageState extends State<BookingsPage> {
           ? Center(child: CircularProgressIndicator(color: primaryTeal))
           : RefreshIndicator(
               onRefresh: () => clientVM.fetchMyOrders(),
-              child: clientVM.myOrders.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(20),
-                      itemCount: clientVM.myOrders.length,
-                      itemBuilder: (context, index) {
-                        final order = clientVM.myOrders[index];
-                        return _buildBookingCard(order);
-                      },
-                    ),
+              color: primaryTeal,
+              child: Column(
+                children: [
+                  _buildTabBar(),
+                  Expanded(
+                    child: filteredOrders.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            itemCount: filteredOrders.length,
+                            itemBuilder: (context, index) {
+                              final order = filteredOrders[index];
+                              return _buildBookingCard(order);
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
     );
   }
 
   Widget _buildEmptyState() {
+    final isAr = AppLocalization.isArabic;
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: SizedBox(
-        height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - 100, // Approximate height
+        height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - 180,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -69,7 +159,9 @@ class _BookingsPageState extends State<BookingsPage> {
               Icon(Icons.calendar_today_outlined, size: 80, color: Colors.grey[300]),
               const SizedBox(height: 20),
               Text(
-                AppLocalization.isArabic ? 'لا توجد حجوزات حالياً' : 'No bookings yet',
+                _activeSubTab == 0
+                    ? (isAr ? 'لا توجد حجوزات معلقة حالياً' : 'No pending bookings currently')
+                    : (isAr ? 'سجل الحجوزات فارغ' : 'Booking history is empty'),
                 style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey[500]),
               ),
             ],
@@ -84,15 +176,25 @@ class _BookingsPageState extends State<BookingsPage> {
     String statusText;
 
     switch (order.status.toLowerCase()) {
-      case 'accepted':
       case 'completed':
         statusColor = Colors.green;
+        statusText = AppLocalization.isArabic ? 'مكتمل' : 'Completed';
+        break;
+      case 'accepted':
+        statusColor = Colors.teal;
         statusText = AppLocalization.isArabic ? 'مقبول' : 'Accepted';
         break;
+      case 'in_progress':
+        statusColor = Colors.blue;
+        statusText = AppLocalization.isArabic ? 'قيد التنفيذ' : 'In Progress';
+        break;
       case 'rejected':
-      case 'cancelled':
         statusColor = Colors.red;
         statusText = AppLocalization.isArabic ? 'مرفوض' : 'Rejected';
+        break;
+      case 'cancelled':
+        statusColor = Colors.red;
+        statusText = AppLocalization.isArabic ? 'ملغي' : 'Cancelled';
         break;
       case 'pending':
       default:

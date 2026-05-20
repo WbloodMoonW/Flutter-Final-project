@@ -898,12 +898,12 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   Widget _buildHistoryTab(WorkerViewModel workerVM) {
-    final history = workerVM.orders.where((o) => o.status == 'completed' || o.status == 'cancelled' || o.status == 'rejected').toList();
+    final history = workerVM.orders.where((o) => o.status.toLowerCase() == 'completed').toList();
     if (history.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Text(_isAr ? 'السجل فارغ' : 'History is empty', style: GoogleFonts.cairo(color: textMuted)),
+          child: Text(_isAr ? 'لا توجد مشاريع مكتملة' : 'No completed projects', style: GoogleFonts.cairo(color: textMuted)),
         ),
       );
     }
@@ -960,7 +960,7 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'pending': return Colors.orange;
       case 'in_progress': return Colors.blue;
       case 'completed': return Colors.green;
@@ -971,8 +971,9 @@ class _WorkerProfilePageState extends State<WorkerProfilePage> {
   }
 
   String _translateStatus(String status) {
-    if (!_isAr) return status.replaceAll('_', ' ');
-    switch (status) {
+    final s = status.toLowerCase();
+    if (!_isAr) return s.replaceAll('_', ' ');
+    switch (s) {
       case 'pending': return 'قيد الانتظار';
       case 'accepted': return 'مقبول';
       case 'in_progress': return 'قيد التنفيذ';

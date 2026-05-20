@@ -104,7 +104,22 @@ class Worker {
       completionRate: json['completionRate'] ?? 0,
       portfolio: (json['portfolio'] as List?)?.map((p) => PortfolioItem.fromMap(p)).toList() ?? [],
       pricingPackages: (json['pricingPackages'] as List?)?.map((p) => PricingPackage.fromMap(p)).toList() ?? (json['packages'] as List?)?.map((p) => PricingPackage.fromMap(p)).toList() ?? [],
-      services: (json['services'] as List?)?.map((s) => WorkerService.fromMap(s)).toList() ?? [],
+      services: () {
+        final List<WorkerService> list = [];
+        final rawServices = json['services'] ?? json['serviceList'] ?? json['service'] ?? json['workerServices'];
+        if (rawServices is List) {
+          for (var item in rawServices) {
+            if (item is Map) {
+              try {
+                list.add(WorkerService.fromMap(Map<String, dynamic>.from(item)));
+              } catch (e) {
+                // Ignore malformed service but parse others
+              }
+            }
+          }
+        }
+        return list;
+      }(),
       workingHours: wh,
       reviews: (json['reviews'] as List?)?.map((r) => CustomerReview.fromMap(r)).toList() ?? [],
       isCompany: json['isCompany'] ?? false,

@@ -42,21 +42,71 @@ class WorkerService {
     String extractId(dynamic val) {
       if (val == null) return '';
       if (val is String) return val;
-      if (val is Map) return val['\$oid']?.toString() ?? val['_id']?.toString() ?? val['id']?.toString() ?? '';
+      if (val is Map) {
+        return val['_id']?.toString() ?? 
+               val['id']?.toString() ?? 
+               val['\$oid']?.toString() ?? 
+               '';
+      }
       return val.toString();
     }
 
+    double parseDouble(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return true;
+      if (val is bool) return val;
+      if (val is num) return val != 0;
+      final str = val.toString().toLowerCase();
+      if (str == 'true' || str == '1' || str == 'yes' || str == 'active') return true;
+      if (str == 'false' || str == '0' || str == 'no' || str == 'inactive') return false;
+      return true;
+    }
+
+    Map<String, double>? parsedPriceRange;
+    try {
+      final pr = map['priceRange'];
+      if (pr != null && pr is Map) {
+        parsedPriceRange = {};
+        pr.forEach((k, v) {
+          if (v != null) {
+            parsedPriceRange![k.toString()] = parseDouble(v);
+          }
+        });
+      }
+    } catch (e) {
+      // Safe fallback
+    }
+
+    List<String> parsedImages = [];
+    try {
+      final img = map['images'] ?? map['imageUrls'] ?? map['imageUrl'];
+      if (img != null) {
+        if (img is List) {
+          parsedImages = img.map((e) => e.toString()).toList();
+        } else if (img is String) {
+          parsedImages = [img];
+        }
+      }
+    } catch (e) {
+      // Safe fallback
+    }
+
     return WorkerService(
-      id: extractId(map['_id'] ?? map['id']),
+      id: extractId(map['_id'] ?? map['id'] ?? map['serviceId'] ?? map['serviceID']),
       name: map['name'] ?? map['title'] ?? '',
-      categoryId: extractId(map['categoryId'] ?? map['category']),
-      workerId: extractId(map['workerID'] ?? map['workerId']),
+      categoryId: extractId(map['categoryId'] ?? map['categoryID'] ?? map['category']),
+      workerId: extractId(map['workerID'] ?? map['workerId'] ?? map['worker']),
       description: map['description'] ?? '',
-      price: (map['price'] ?? 0).toDouble(),
-      typeofService: map['typeOfService'] ?? map['typeofService'] ?? 'fixed',
-      priceRange: map['priceRange'] != null ? Map<String, double>.from(map['priceRange'].map((k, v) => MapEntry(k, v.toDouble()))) : null,
-      images: List<String>.from(map['images'] ?? []),
-      isActive: map['active'] ?? map['isActive'] ?? true,
+      price: parseDouble(map['price'] ?? map['cost'] ?? map['amount']),
+      typeofService: map['typeOfService'] ?? map['typeofService'] ?? map['type'] ?? 'fixed',
+      priceRange: parsedPriceRange,
+      images: parsedImages,
+      isActive: parseBool(map['active'] ?? map['isActive']),
     );
   }
 

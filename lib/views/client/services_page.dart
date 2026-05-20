@@ -23,18 +23,29 @@ class _ServicesPageState extends State<ServicesPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchWorkers();
+      _fetchWorkers(force: false);
     });
   }
 
-  Future<void> _fetchWorkers() async {
+  Future<void> _fetchWorkers({bool force = false}) async {
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
-    await clientVM.fetchWorkers();
+    if (force || clientVM.workers.isEmpty) {
+      await clientVM.fetchWorkers();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final clientVM = Provider.of<ClientViewModel>(context);
+
+    // Sync external search updates (e.g. from home page search bar)
+    if (_searchController.text != clientVM.searchQuery) {
+      _searchController.text = clientVM.searchQuery;
+      // Put cursor at the end of text
+      _searchController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _searchController.text.length),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -84,7 +95,7 @@ class _ServicesPageState extends State<ServicesPage> {
             ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _fetchWorkers,
+                onRefresh: () => _fetchWorkers(force: true),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(24),

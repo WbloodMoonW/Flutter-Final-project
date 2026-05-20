@@ -16,6 +16,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final Color primaryTeal = const Color(0xFF006D5B);
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -25,11 +26,26 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchData() async {
     final clientVM = Provider.of<ClientViewModel>(context, listen: false);
     await clientVM.fetchCategories();
     await clientVM.fetchWorkers();
     await clientVM.fetchFeaturedCoupon();
+  }
+
+  void _performSearch(ClientViewModel clientVM) {
+    final query = _searchController.text.trim();
+    clientVM.searchWorkers(query);
+    final mainWrapper = context.findAncestorStateOfType<MainWrapperState>();
+    if (mainWrapper != null) {
+      mainWrapper.updateIndex(1); // switch to ServicesPage tab
+    }
   }
 
   @override
@@ -62,7 +78,7 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(),
+                      _buildHeader(clientVM),
                       const SizedBox(height: 30),
                       _buildCategoriesSection(clientVM),
                       const SizedBox(height: 30),
@@ -78,7 +94,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(ClientViewModel clientVM) {
     return Stack(
       children: [
         Container(
@@ -116,7 +132,9 @@ class _HomePageState extends State<HomePage> {
               boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: TextField(
+              controller: _searchController,
               textAlign: AppLocalization.isArabic ? TextAlign.right : TextAlign.left,
+              onSubmitted: (_) => _performSearch(clientVM),
               decoration: InputDecoration(
                 hintText: AppLocalization.translate('search_hint'),
                 hintStyle: GoogleFonts.cairo(color: Colors.grey[400], fontSize: 13),
@@ -124,7 +142,7 @@ class _HomePageState extends State<HomePage> {
                 suffixIcon: Padding(
                   padding: const EdgeInsets.all(6.0),
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () => _performSearch(clientVM),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryTeal,
                       foregroundColor: Colors.white,
